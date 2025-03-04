@@ -19,6 +19,7 @@ set(SOURCES
     src/surface.cpp
     src/sampler.cpp
     src/numerical_integrator.cpp
+    src/tools.cpp
 )
 
 # Add executable

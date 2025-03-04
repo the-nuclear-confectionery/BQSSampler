@@ -166,6 +166,7 @@ double ParticleSystem::calculate_particle_number(double T, double muB, double mu
 
 
     }
+    /// @todo check this 2. factor
     return particle_density*2.;
 }
 
