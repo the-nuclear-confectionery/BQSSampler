@@ -1,5 +1,5 @@
 #include "sampler.h"
-#include <chrono>
+
 
 
 // Constructor implementation
@@ -8,7 +8,7 @@ Sampler::Sampler(){
 
     sampler_seed =  static_cast<unsigned>(
             std::chrono::system_clock::now().time_since_epoch().count() );
-            Tools::read_2d_table("../utils/max_w_table.dat", mbar_vals_wtable, omega_vals_wtable, max_w_values);
+            max_w_table.load_from_file("../utils/max_w_table.dat");
     
 }
 
@@ -37,16 +37,39 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
     int naboveantik0 = 0;
     int nabovebosons = 0;
     int nabovefermions = 0;
+    
+    //variables for time acumulation
+    double t_lrf = 0.;
+    double t_integrator = 0.;
+    double t_momentum = 0.;
+    double t_species = 0.;
+    double t_boost = 0.;
+    double t_total = 0.;
+    double t_renormalization = 0.;
+    double t_acceptance = 0.;
+    double t_check_weight = 0.;
+    double t_interpolation = 0.;
+    auto start_total = std::chrono::high_resolution_clock::now();
+    int tryes = 0;
+    int accepted = 0;
     for (int icell = 0; icell < surface.npoints; icell++) {
+        auto start_lrf = std::chrono::high_resolution_clock::now();
         LRF lrf(surface.ut[icell],
                 surface.ux[icell],
                 surface.uy[icell],
                 surface.ueta[icell],
+                surface.dsigma_t[icell],
+                surface.dsigma_x[icell],
+                surface.dsigma_y[icell],
+                surface.dsigma_eta[icell],
                 surface.tau[icell]);
 
         if (icell % (surface.npoints / 20) == 0) {
             std::cout << "Progress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "%" << std::endl;
         }
+        auto end_lrf = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed_lrf = end_lrf - start_lrf;
+        t_lrf += elapsed_lrf.count();
 
         double tau = surface.tau[icell];
         double tau_squared = tau * tau;
@@ -56,32 +79,37 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
         double muS = surface.muS[icell];
         double muQ = surface.muQ[icell];
 
+        auto start_integrator = std::chrono::high_resolution_clock::now();
         double N_tot_cell = particle_system.calculate_particle_number(T, muB, muS, muQ, integrator);
+        auto end_integrator = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed_integrator = end_integrator - start_integrator;
+        t_integrator += elapsed_integrator.count();
 
-        lrf.dsigma_t = surface.dsigma_t[icell];
-        lrf.dsigma_x = surface.dsigma_x[icell];
-        lrf.dsigma_y = surface.dsigma_y[icell];
-        lrf.dsigma_n = surface.dsigma_eta[icell];
-
+        auto compute_lrf_start = std::chrono::high_resolution_clock::now();
         lrf.boost_dsigma_to_lrf(tau_squared);
         lrf.compute_dsigma_magnitude();
-        //if(icell == 20424){
-        //    std::cout << "dsigma_magnitude: " << lrf.dsigma_magnitude << std::endl;
-        //    std::cout << "N_tot_cell: " << N_tot_cell << std::endl;
-        //    std::cout << "N_tot_cell * 2.0 * y_max: " << N_tot_cell * 2.0 * y_max << std::endl;
-        //}
-
-
+        
+        auto compute_lrf_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed_compute_lrf = compute_lrf_end - compute_lrf_start;
+        t_boost += elapsed_compute_lrf.count();
+        
         N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
         Ncell += N_tot_cell;
         if(N_tot_cell <=0.) continue;
 
+
+        auto species_sampling_start = std::chrono::high_resolution_clock::now();
         std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
         std::discrete_distribution<int> particle_type_distribution(
                                                 particle_system.particle_species_number.begin(), 
                                                 particle_system.particle_species_number.end());
         int N_hadrons = poisson_hadrons(generator_poisson);
         Ntot += N_hadrons;
+        auto species_sampling_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed_species_sampling = species_sampling_end - species_sampling_start;
+
+
+        auto momentum_sampling_start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < N_hadrons; i++) {
             // Sample particle type
             int sampled_index = particle_type_distribution(generator_type);
@@ -96,11 +124,23 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
             double mbar = mass / T;
             double omega = (baryon * muB + strange * muS + charge * muQ)/T;
             double max_w =1.0;
+            auto start_weight = std::chrono::high_resolution_clock::now();
+            
+            
             if(theta == -1.0){
+                auto start_check_weight = std::chrono::high_resolution_clock::now();
                 if(check_weight_region(mbar, omega)){
+                    auto end_check_weight = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double> elapsed_check_weight = end_check_weight - start_check_weight;
+                    t_check_weight += elapsed_check_weight.count();
                     nabove++;
                     // interpolate max_w
-                    max_w = get_max_w(mbar, omega);
+                    auto start_interpolation = std::chrono::high_resolution_clock::now();
+                    //max_w = get_max_w(mbar, omega);
+                    max_w = max_w_table.bilinear_interpolate(mbar, omega);
+                    auto end_interpolation = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double> elapsed_interpolation = end_interpolation - start_interpolation;
+                    t_interpolation += elapsed_interpolation.count();
                     // check for positive, neutral, negative pions
                     //if(pid == 211){
                     //    nabovepp++;
@@ -117,15 +157,19 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                     //std::cout << "max_w: " << max_w << std::endl;
                 }
             }
-
-            bool rejected = false;
+            auto end_weight = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_weight = end_weight - start_weight;
+            t_renormalization += elapsed_weight.count();
+            
+            bool rejected = true;
             double pbar, Ebar, kbar, phi_over_2pi, costheta, weight;
+            auto start_acceptance = std::chrono::high_resolution_clock::now();
             //pions 
             ///@todo: check which value is correct
             if(mbar <= 1.008){
                 while(rejected)
                 {
-                
+                    tryes++;
                     double r1= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
                     double r2= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
                     double r3= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
@@ -149,6 +193,8 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                     if(std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum) < weight) break;
 
                 } // rejection loop
+                accepted++;
+
             }
             else{
                 //heavy particles
@@ -167,6 +213,7 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                 double kbar;  // kinetic energy / T
                 while(rejected)
                 {
+                    tryes++;
                     int sampled_distribution = K_distribution(generator_momentum);
                     // select distribution to sample from based on integrated weights
                     if(sampled_distribution == 0)
@@ -211,7 +258,11 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                     // check pLRF acceptance
                     if(std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum) < weight) break;
                 } // rejection loop
+                accepted++;
             }
+            auto end_acceptance = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double> elapsed_acceptance = end_acceptance - start_acceptance;
+            t_acceptance += elapsed_acceptance.count();
             double E = Ebar * T;
             double p = pbar * T;
             double phi = phi_over_2pi * 2.0 * M_PI;
@@ -220,12 +271,11 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
             double px_lrf = p * sintheta * cos(phi);
             double py_lrf = p * sintheta * sin(phi);
             double pz_lrf = p * costheta;
-
-
-        
-
   
         }
+        auto momentum_sampling_end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed_momentum_sampling = momentum_sampling_end - momentum_sampling_start;
+        t_momentum += elapsed_momentum_sampling.count();
 
 
 
@@ -233,6 +283,25 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
             std::cout << "Progress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "% completed" << std::endl;
         }
     }
+    auto end_total = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed_total = end_total - start_total;
+
+    t_total += elapsed_total.count();
+
+    std::cout << "Total tryes: " << tryes << std::endl;
+    std::cout << "Total accepted: " << accepted << std::endl;
+    std::cout << "Fraction accepted: " << (double)accepted/(double)tryes << std::endl;
+
+    std::cout << "Total sampling time: " << t_total << " seconds" << std::endl;
+    std::cout << "LRF computation time: " << t_lrf << " seconds" << std::endl;
+    std::cout << "Integrator computation time: " << t_integrator << " seconds" << std::endl;
+    std::cout << "Momentum sampling time: " << t_momentum << " seconds" << std::endl;
+    std::cout << "Species sampling time: " << t_species << " seconds" << std::endl;
+    std::cout << "Boost and computation time: " << t_boost << " seconds" << std::endl;
+    std::cout << "Renormalization time: " << t_renormalization << " seconds" << std::endl;
+    std::cout << "Acceptance time: " << t_acceptance << " seconds" << std::endl;
+    std::cout << "Check weight time: " << t_check_weight << " seconds" << std::endl;
+    std::cout << "Interpolation time: " << t_interpolation << " seconds" << std::endl;
 
     std::cout << "Total number of particles sampled: " << Ntot << std::endl;
     std::cout << "Total number of particles from cells: " << Ncell << std::endl;
@@ -263,6 +332,3 @@ bool Sampler::check_weight_region(double mbar, double omega) {
 }
 
 
-double Sampler::get_max_w(double mbar, double omega) {
-    return Tools::bilinear_interpolate(mbar_vals_wtable, omega_vals_wtable, max_w_values, mbar, omega);
-}

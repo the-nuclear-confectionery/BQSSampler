@@ -235,8 +235,15 @@ def save_max_w_table(mbar_vals, chem_vals, max_w_values, filename="max_w_table.d
     """
     Saves a structured table of (m/T, chem, max w_n(p)) where max w_n(p) > 1,
     ensuring correct order without using flattening.
+    Adds a header line with # Nx Ny Npoints.
     """
+    Nx = len(mbar_vals)
+    Ny = len(chem_vals)
+    Npoints = Nx * Ny  # Total number of grid points
+
     with open(filename, 'w') as f:
+        # Write the header
+        f.write(f"# {Nx} {Ny} {Npoints}\n")
 
         # Manually iterate over indices to maintain correct structure
         for j, mbar in enumerate(mbar_vals):  # Iterate over mbar first (outer loop)

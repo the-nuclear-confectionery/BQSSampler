@@ -33,7 +33,16 @@ public:
     // Uperp and utperp
     double uperp, utperp;
 
-    LRF(double ut_in, double ux_in, double uy_in, double ueta_in,  double tau) {
+    // momentums
+    double pLRF_t, pLRF_x, pLRF_y, pLRF_z;
+    // momentum in lab frame
+    double pLab_tau, pLab_x, pLab_y, pLab_eta;
+
+    LRF(double ut_in, double ux_in, double uy_in, double ueta_in,
+        double dsigma_t_in, double dsigma_x_in, 
+        double dsigma_y_in, double dsigma_n_in, 
+        double tau) {
+
         ut = ut_in;
         ux = ux_in;
         uy = uy_in;
@@ -61,6 +70,11 @@ public:
             xy = utperp * uy / uperp;
             yy = ux / uperp;
         }
+
+        dsigma_t = dsigma_t_in;
+        dsigma_x = dsigma_x_in;
+        dsigma_y = dsigma_y_in;
+        dsigma_n = dsigma_n_in;
     }
 
 
@@ -111,6 +125,18 @@ public:
     void compute_dsigma_magnitude() {
         dsigma_space = sqrt(dsigma_x_lrf * dsigma_x_lrf + dsigma_y_lrf * dsigma_y_lrf + dsigma_z_lrf * dsigma_z_lrf);
         dsigma_magnitude = fabs(dsigma_t_lrf) + dsigma_space;
+    }
+
+    void boost_momentum_to_lab(double tau_squared, double pLRF[4]) {
+        pLRF_t = pLRF[0];
+        pLRF_x = pLRF[1];
+        pLRF_y = pLRF[2];
+        pLRF_z = pLRF[3];
+
+        pLab_tau = pLRF_t * ut + pLRF_x * xt + pLRF_z * zt;
+        pLab_x   = pLRF_t * ux + pLRF_x * xx + pLRF_y * yx;
+        pLab_y   = pLRF_t * uy + pLRF_x * xy + pLRF_y * yy;
+        pLab_eta = pLRF_t * ueta + pLRF_x * xeta + pLRF_z * zeta; 
     }
 };
 
