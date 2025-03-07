@@ -21,6 +21,10 @@ Sampler::Sampler(){
 void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, const NumericalIntegrator& integrator) {
     double y_max = 5.0; // Maximum rapidity
     int D = 2; // Number of dimensions
+    int Nsamples = 200;
+
+    //resize the sampled particles vector
+    sampled_particles.resize(Nsamples);
 
     std::default_random_engine generator_poisson(sampler_seed);
     std::default_random_engine generator_type(sampler_seed + 10000);
@@ -81,115 +85,113 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
  
 
 
-        auto species_sampling_start = std::chrono::high_resolution_clock::now();
         std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
         std::discrete_distribution<int> particle_type_distribution(
                                                 particle_system.particle_species_number.begin(), 
                                                 particle_system.particle_species_number.end());
-        int N_hadrons = poisson_hadrons(generator_poisson);
-        Ntot += N_hadrons;
-        auto species_sampling_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed_species_sampling = species_sampling_end - species_sampling_start;
 
-        //Create thermal parms struct for the sampled particles
+        
         ThermalParams sampled_params;
         sampled_params.T = T;
         sampled_params.alphaB = muB / T;
         sampled_params.alphaQ = muQ / T;
         sampled_params.alphaS = muS / T;
         auto momentum_sampling_start = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < N_hadrons; i++) {
-            // Sample particle type
-            int sampled_index = particle_type_distribution(generator_type);
-            
-            int pid = particle_system.pid[sampled_index];
+        for (int isample = 0; isample < Nsamples; isample++) {
 
-            double mass = particle_system.mass[sampled_index];
-            //name
-            std::string name = particle_system.name[sampled_index];
-            //double theta = particle_system.theta[sampled_index];
-            //double baryon = particle_system.baryon[sampled_index];
-            //double strange = particle_system.strange[sampled_index];
-            //double charge = particle_system.charge[sampled_index];
+            std::vector<Particle> single_sample_particles;
 
-            sampled_params.mbar     = particle_system.mass[sampled_index] / T;
-            sampled_params.baryon   = particle_system.baryon[sampled_index];
-            sampled_params.strange  = particle_system.strange[sampled_index];
-            sampled_params.charge   = particle_system.charge[sampled_index];
-            sampled_params.sign     = particle_system.theta[sampled_index];
-        
-            double sampled_pLRF[4] = {0.0, 0.0, 0.0, 0.0};
-            sample_momentum(sampled_params, sampled_pLRF, generator_momentum);
-            
+            int N_hadrons = poisson_hadrons(generator_poisson);
+            Ntot += N_hadrons;
 
-            double weight_flux = std::max(0.0, lrf.dsigma_t_lrf * sampled_pLRF[0] 
-                                             - lrf.dsigma_x_lrf * sampled_pLRF[1] 
-                                             - lrf.dsigma_y_lrf * sampled_pLRF[2]
-                                             - lrf.dsigma_z_lrf * sampled_pLRF[3])
-                                             /(lrf.dsigma_magnitude * sampled_pLRF[0]);
+            //Create thermal parms struct for the sampled particles
 
-            double feq = 0.0;
-            double delta_f = 0.0;
-            ///\todo add feq and delta_f calculation
-            //double weight_visc = 0.5*(1.+ delta_f/feq);
-            double weight_visc = 0.5;
-            //boost to lab frame
-            lrf.boost_momentum_to_lab(tau_squared, sampled_pLRF);
-            bool add_particle = (std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_keep) < (weight_flux*weight_visc));
-            double E, pz, yp;
-            if(D == 2 && add_particle)
-            {
-              double random_number = std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_rapidity);
-              yp = y_max*(2.0*random_number - 1.0);
 
-              double sinhy = sinh(yp);
-              double coshy = sqrt(1.0 + sinhy * sinhy);
+            for (int i = 0; i < N_hadrons; i++) {
+                // Sample particle type
+                int sampled_index = particle_type_distribution(generator_type);
 
-              double ptau = lrf.pLab_tau;
-              double tau_pn = tau * lrf.pLab_eta;
-              double mT = sqrt(mass*mass  + lrf.pLab_x * lrf.pLab_x + lrf.pLab_y * lrf.pLab_y);
+                int pid = particle_system.pid[sampled_index];
 
-              sinheta = (ptau*sinhy - tau_pn*coshy) / mT;
-              double eta = asinh(sinheta);
-              cosheta = sqrt(1.0 + sinheta * sinheta);
+                double mass = particle_system.mass[sampled_index];
+                //name
+                std::string name = particle_system.name[sampled_index];
+                //double theta = particle_system.theta[sampled_index];
+                //double baryon = particle_system.baryon[sampled_index];
+                //double strange = particle_system.strange[sampled_index];
+                //double charge = particle_system.charge[sampled_index];
 
-              pz = mT * sinhy;
-              E = mT * coshy;
-              //if pz>5.0, print inf
-                //if(abs(pz) > 200.0){
-                //    std::cout << "Sampled id: " << pid << " name: " << name << std::endl;
-                //    std::cout << "pz: " << pz << " E: " << E << " yp: " << yp << " mT: " << mT << " ptau: " << ptau << " tau_pn: " << tau_pn << "px: " << lrf.pLab_x << " py: " << lrf.pLab_y << std::endl;
-                //    std::cout << "sinhy: " << sinhy << " coshy: " << coshy << " sinheta: " << sinheta << " cosheta: " << cosheta << std::endl;
-                //    std::cout << "mass: " << mass << " eta: " << eta << "peta: " << lrf.pLab_eta << std::endl;
-                //}
-              //cout << pz << "\t" << tau_pn * cosheta  +  ptau * sinheta << endl;
+                sampled_params.mbar     = particle_system.mass[sampled_index] / T;
+                sampled_params.baryon   = particle_system.baryon[sampled_index];
+                sampled_params.strange  = particle_system.strange[sampled_index];
+                sampled_params.charge   = particle_system.charge[sampled_index];
+                sampled_params.sign     = particle_system.theta[sampled_index];
+
+                double sampled_pLRF[4] = {0.0, 0.0, 0.0, 0.0};
+                sample_momentum(sampled_params, sampled_pLRF, generator_momentum);
+
+
+                double weight_flux = std::max(0.0, lrf.dsigma_t_lrf * sampled_pLRF[0] 
+                                                 - lrf.dsigma_x_lrf * sampled_pLRF[1] 
+                                                 - lrf.dsigma_y_lrf * sampled_pLRF[2]
+                                                 - lrf.dsigma_z_lrf * sampled_pLRF[3])
+                                                 /(lrf.dsigma_magnitude * sampled_pLRF[0]);
+
+                double feq = 0.0;
+                double delta_f = 0.0;
+                ///\todo add feq and delta_f calculation
+                //double weight_visc = 0.5*(1.+ delta_f/feq);
+                double weight_visc = 0.5;
+                //boost to lab frame
+                lrf.boost_momentum_to_lab(tau_squared, sampled_pLRF);
+                bool add_particle = (std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_keep) < (weight_flux*weight_visc));
+                double E, pz, yp;
+                if(D == 2 && add_particle)
+                {
+                  double random_number = std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_rapidity);
+                  yp = y_max*(2.0*random_number - 1.0);
+
+                  double sinhy = sinh(yp);
+                  double coshy = sqrt(1.0 + sinhy * sinhy);
+
+                  double ptau = lrf.pLab_tau;
+                  double tau_pn = tau * lrf.pLab_eta;
+                  double mT = sqrt(mass*mass  + lrf.pLab_x * lrf.pLab_x + lrf.pLab_y * lrf.pLab_y);
+
+                  sinheta = (ptau*sinhy - tau_pn*coshy) / mT;
+                  double eta = asinh(sinheta);
+                  cosheta = sqrt(1.0 + sinheta * sinheta);
+
+                  pz = mT * sinhy;
+                  E = mT * coshy;
+                  //if pz>5.0, print inf
+                    //if(abs(pz) > 200.0){
+                    //    std::cout << "Sampled id: " << pid << " name: " << name << std::endl;
+                    //    std::cout << "pz: " << pz << " E: " << E << " yp: " << yp << " mT: " << mT << " ptau: " << ptau << " tau_pn: " << tau_pn << "px: " << lrf.pLab_x << " py: " << lrf.pLab_y << std::endl;
+                    //    std::cout << "sinhy: " << sinhy << " coshy: " << coshy << " sinheta: " << sinheta << " cosheta: " << cosheta << std::endl;
+                    //    std::cout << "mass: " << mass << " eta: " << eta << "peta: " << lrf.pLab_eta << std::endl;
+                    //}
+                  //cout << pz << "\t" << tau_pn * cosheta  +  ptau * sinheta << endl;
+                }
+                else
+                {
+                  pz = tau * lrf.pLab_eta  * cosheta  +  lrf.pLab_tau  * sinheta;
+                  E = sqrt(mass * mass + lrf.pLab_x * lrf.pLab_x + lrf.pLab_y * lrf.pLab_y + pz * pz);
+                  yp = 0.5 * log((E + pz) / (E - pz));
+                  double eta =  surface.eta[icell];
+                }
+
+                double t = tau * cosheta;
+                double z = tau * sinheta;
+                if(add_particle){
+                    double x = surface.x[icell];
+                    double y = surface.y[icell];
+                    Particle sampled_particle(pid, mass, E, lrf.pLab_x, lrf.pLab_y, pz, t, x, y, z);
+                    sampled_particles[isample].push_back(sampled_particle);
+                }
+
+
             }
-            else
-            {
-              pz = tau * lrf.pLab_eta  * cosheta  +  lrf.pLab_tau  * sinheta;
-              E = sqrt(mass * mass + lrf.pLab_x * lrf.pLab_x + lrf.pLab_y * lrf.pLab_y + pz * pz);
-              yp = 0.5 * log((E + pz) / (E - pz));
-              double eta =  surface.eta[icell];
-            }
-
-            double t = tau * cosheta;
-            double z = tau * sinheta;
-            if(add_particle){
-                sampled_px.push_back(lrf.pLab_x);
-                sampled_py.push_back(lrf.pLab_y);
-                sampled_pz.push_back(pz);
-                sampled_E.push_back(E);
-                sampled_x.push_back(surface.x[icell]);
-                sampled_y.push_back(surface.y[icell]);
-                sampled_z.push_back(z);
-                sampled_t.push_back(t);
-                sampled_mass.push_back(mass);
-                sampled_pid.push_back(pid);
-            }
-
-
-
-
         }
         auto momentum_sampling_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed_momentum_sampling = momentum_sampling_end - momentum_sampling_start;
@@ -218,25 +220,14 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
     std::cout << "Total number of particles sampled: " << Ntot << std::endl;
     std::cout << "Total number of particles from cells: " << Ncell << std::endl;
 
-    // Store the sampled data in a file
-    std::ofstream output_file("sampled_particles.dat");
-    output_file << "# event " << 0 << "\n";
-    for (size_t i = 0; i < sampled_pid.size(); i++) {
-        output_file << sampled_pid[i] << " "
-                    << sampled_t[i] << " "
-                    << sampled_x[i] << " "
-                    << sampled_y[i] << " "
-                    << sampled_z[i] << " "
-                    << sampled_mass[i] << " "
-                    << sampled_E[i] << " "
-                    << sampled_px[i] << " "
-                    << sampled_py[i] << " "
-                    << sampled_pz[i] << " " << std::endl;
-    }
-    output_file << "# event " << 0 << " end" << "\n";
-    output_file.close();
     std::cout << "Massless above: " << nabove << std::endl;
     std::cout << "Massive above: " << nabove_massive << std::endl;
+
+    std::string filename = "sampled_particles.dat";
+    std::cout << "Saving sampled particles to " << filename << std::endl;
+    save_particles(filename);
+
+
 }
 
 
@@ -439,4 +430,26 @@ double Sampler::get_max_w_massive(const ThermalParams& params) {
         }
     }
     return max_w;
+}
+
+
+void Sampler::save_particles(const std::string& filename) const {
+    std::ofstream output_file(filename);
+    for (size_t i = 0; i < sampled_particles.size(); i++) {
+        output_file << "# event " << i << "\n";
+        for (size_t j = 0; j < sampled_particles[i].size(); j++) {
+            output_file << sampled_particles[i][j].pid << " "
+                        << sampled_particles[i][j].t << " "
+                        << sampled_particles[i][j].x << " "
+                        << sampled_particles[i][j].y << " "
+                        << sampled_particles[i][j].z << " "
+                        << sampled_particles[i][j].mass << " "
+                        << sampled_particles[i][j].E << " "
+                        << sampled_particles[i][j].px << " "
+                        << sampled_particles[i][j].py << " "
+                        << sampled_particles[i][j].pz << " " << std::endl;
+        }
+        output_file << "# event " << i << " end" << "\n";
+    }
+    output_file.close();
 }

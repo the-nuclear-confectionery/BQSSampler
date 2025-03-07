@@ -5,6 +5,7 @@
 #include <iostream>
 #include <chrono>
 #include <random>
+#include <sstream>
 
 
 #include "surface.h"
@@ -33,6 +34,9 @@ public:
     void sample_momentum(const ThermalParams& params, double pLRF[4], std::default_random_engine& generator_momentum);
 
 
+    void save_particles(const std::string& filename) const;
+
+
 private:
 
     unsigned sampler_seed;  // Store the random number
@@ -52,16 +56,8 @@ private:
     Table2D max_w_table;
     Table2D max_w_table_massive;
 
-    std::vector<int> sampled_pid;
-    std::vector<double> sampled_px;
-    std::vector<double> sampled_py;
-    std::vector<double> sampled_pz;
-    std::vector<double> sampled_E;
-    std::vector<double> sampled_x;
-    std::vector<double> sampled_y;
-    std::vector<double> sampled_z;
-    std::vector<double> sampled_t;
-    std::vector<double> sampled_mass;
+    //sampled particle vectors
+    std::vector< std::vector <Particle> > sampled_particles;
 
 
 };

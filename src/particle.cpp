@@ -1,23 +1,16 @@
 #include "particle.h"
 
-/// @brief Construct a Particle object with default values
-Particle::Particle(int pid, std::string name, double mass, double width, 
-                   double spin_degeneracy, double baryon, double strange, 
-                   double charm, double bottom, double isospin_degeneracy, 
-                   double charge, int decays, double theta)
-    : pid(pid), name(name), mass(mass), width(width), spin_degeneracy(spin_degeneracy),
-      baryon(baryon), strange(strange), charm(charm), bottom(bottom),
-      isospin_degeneracy(isospin_degeneracy), charge(charge), 
-      equilibrium_density(0.0), decays(decays), theta(theta) {}
 
-
-/// @brief Display the particle's data
-void Particle::display() const {
-    std::cout << "Particle ID: " << pid << ", Name: " << name << ", Mass: " << mass
-              << ", Width: " << width << ", Spin Degeneracy: " << spin_degeneracy 
-              << ", Baryon: " << baryon << ", Strange: " << strange 
-              << ", Charm: " << charm << ", Bottom: " << bottom 
-              << ", Isospin Degeneracy: " << isospin_degeneracy 
-              << ", Charge: " << charge << ", Decays: " << decays 
-              << ", Equilibrium Density: " << equilibrium_density << std::endl;
+// Constructor implementation
+Particle::Particle(int pid, double mass, double E, double px, double py, double pz, double t, double x, double y, double z){
+    this->pid = pid;
+    this->mass = mass;
+    this->E = E;
+    this->px = px;
+    this->py = py;
+    this->pz = pz;
+    this->t = t;
+    this->x = x;
+    this->y = y;
+    this->z = z;  
 }
