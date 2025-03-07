@@ -78,26 +78,26 @@ public:
     }
 
 
-    void test_orthonormality(double tau_squared) {
-        // Test orthonormality of basis vectors
-        double u_normal = fabs(ut * ut - ux * ux - uy * uy - tau_squared * ueta * ueta - 1.0);
-        double x_normal = fabs(xt * xt - xx * xx - xy * xy - tau_squared * xeta * xeta + 1.0);
-        double y_normal = fabs(-yx * yx - yy * yy + 1.0);
-        double z_normal = fabs(zt * zt - tau_squared * zeta * zeta + 1.0);
-
-        double u_dot_x = fabs(xt * ut - xx * ux - xy * uy - tau_squared * xeta * ueta);
-        double u_dot_y = fabs(-yx * ux - yy * uy);
-        double u_dot_z = fabs(zt * ut - tau_squared * zeta * ueta);
-
-        double x_dot_y = fabs(-xx * yx - xy * yy);
-        double x_dot_z = fabs(xt * zt - tau_squared * xeta * zeta);
-
-        double u_orthogonal = std::max(u_dot_x, std::max(u_dot_y, u_dot_z));
-        double x_orthogonal = std::max(x_dot_y, x_dot_z);
-
-        double epsilon = 1.e-14;
-        // Additional checks or logging can be added if needed
-    }
+    //void test_orthonormality(double tau_squared) {
+    //    // Test orthonormality of basis vectors
+    //    double u_normal = fabs(ut * ut - ux * ux - uy * uy - tau_squared * ueta * ueta - 1.0);
+    //    double x_normal = fabs(xt * xt - xx * xx - xy * xy - tau_squared * xeta * xeta + 1.0);
+    //    double y_normal = fabs(-yx * yx - yy * yy + 1.0);
+    //    double z_normal = fabs(zt * zt - tau_squared * zeta * zeta + 1.0);
+//
+    //    double u_dot_x = fabs(xt * ut - xx * ux - xy * uy - tau_squared * xeta * ueta);
+    //    double u_dot_y = fabs(-yx * ux - yy * uy);
+    //    double u_dot_z = fabs(zt * ut - tau_squared * zeta * ueta);
+//
+    //    double x_dot_y = fabs(-xx * yx - xy * yy);
+    //    double x_dot_z = fabs(xt * zt - tau_squared * xeta * zeta);
+//
+    //    double u_orthogonal = std::max(u_dot_x, std::max(u_dot_y, u_dot_z));
+    //    double x_orthogonal = std::max(x_dot_y, x_dot_z);
+//
+    //    double epsilon = 1.e-14;
+    //    // Additional checks or logging can be added if needed
+    //}
 
     void boost_shv_to_lrf(double tau_squared) {
         // shv_ij_LRF = Xi.shv.Xj

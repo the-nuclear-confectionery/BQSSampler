@@ -9,11 +9,19 @@ Sampler::Sampler(){
     sampler_seed =  static_cast<unsigned>(
             std::chrono::system_clock::now().time_since_epoch().count() );
             max_w_table.load_from_file("../utils/max_w_table.dat");
+            max_w_table_massive.load_from_file("../utils/max_w_table_massive.dat");
+    sampler_seed = 123123;
+    accepted = 0;
+    tries = 0;
+    nabove = 0;
+    nabove_massive = 0;
     
 }
 
 void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, const NumericalIntegrator& integrator) {
     double y_max = 5.0; // Maximum rapidity
+    int D = 2; // Number of dimensions
+
     std::default_random_engine generator_poisson(sampler_seed);
     std::default_random_engine generator_type(sampler_seed + 10000);
     std::default_random_engine generator_momentum(sampler_seed + 20000);
@@ -25,35 +33,16 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
 
     int Ntot = 0;
     double Ncell = 0.;
-    int npions = 0;
-    int nabove = 0;
-    int nabove2 = 0;
-    int nabovepp = 0;
-    int nabovep0 = 0;
-    int nabovepm = 0;
-    int nabovekp = 0;
-    int nabovek0 = 0;
-    int nabovekm = 0;
-    int naboveantik0 = 0;
-    int nabovebosons = 0;
-    int nabovefermions = 0;
     
     //variables for time acumulation
-    double t_lrf = 0.;
     double t_integrator = 0.;
     double t_momentum = 0.;
     double t_species = 0.;
-    double t_boost = 0.;
     double t_total = 0.;
-    double t_renormalization = 0.;
-    double t_acceptance = 0.;
-    double t_check_weight = 0.;
-    double t_interpolation = 0.;
+
     auto start_total = std::chrono::high_resolution_clock::now();
-    int tryes = 0;
-    int accepted = 0;
+
     for (int icell = 0; icell < surface.npoints; icell++) {
-        auto start_lrf = std::chrono::high_resolution_clock::now();
         LRF lrf(surface.ut[icell],
                 surface.ux[icell],
                 surface.uy[icell],
@@ -63,17 +52,15 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                 surface.dsigma_y[icell],
                 surface.dsigma_eta[icell],
                 surface.tau[icell]);
+        double sinheta = sinh(surface.eta[icell]);
+        double cosheta = sqrt(1.0  +  sinheta * sinheta);
 
         if (icell % (surface.npoints / 20) == 0) {
             std::cout << "Progress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "%" << std::endl;
         }
-        auto end_lrf = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed_lrf = end_lrf - start_lrf;
-        t_lrf += elapsed_lrf.count();
 
         double tau = surface.tau[icell];
         double tau_squared = tau * tau;
-        double u_dot_dsigma = surface.u_dot_dsigma[icell];
         double T = surface.T[icell];
         double muB = surface.muB[icell];
         double muS = surface.muS[icell];
@@ -85,17 +72,13 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
         std::chrono::duration<double> elapsed_integrator = end_integrator - start_integrator;
         t_integrator += elapsed_integrator.count();
 
-        auto compute_lrf_start = std::chrono::high_resolution_clock::now();
         lrf.boost_dsigma_to_lrf(tau_squared);
         lrf.compute_dsigma_magnitude();
         
-        auto compute_lrf_end = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed_compute_lrf = compute_lrf_end - compute_lrf_start;
-        t_boost += elapsed_compute_lrf.count();
-        
         N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
-        Ncell += N_tot_cell;
         if(N_tot_cell <=0.) continue;
+        Ncell += N_tot_cell;
+ 
 
 
         auto species_sampling_start = std::chrono::high_resolution_clock::now();
@@ -108,170 +91,105 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
         auto species_sampling_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed_species_sampling = species_sampling_end - species_sampling_start;
 
-
+        //Create thermal parms struct for the sampled particles
+        ThermalParams sampled_params;
+        sampled_params.T = T;
+        sampled_params.alphaB = muB / T;
+        sampled_params.alphaQ = muQ / T;
+        sampled_params.alphaS = muS / T;
         auto momentum_sampling_start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < N_hadrons; i++) {
             // Sample particle type
             int sampled_index = particle_type_distribution(generator_type);
+            
             int pid = particle_system.pid[sampled_index];
+
             double mass = particle_system.mass[sampled_index];
-            double theta = particle_system.theta[sampled_index];
-            double baryon = particle_system.baryon[sampled_index];
-            double strange = particle_system.strange[sampled_index];
-            double charge = particle_system.charge[sampled_index];
-            if(pid == 211 || pid == -211 || pid == 111) npions++;
-            //check weight region
-            double mbar = mass / T;
-            double omega = (baryon * muB + strange * muS + charge * muQ)/T;
-            double max_w =1.0;
-            auto start_weight = std::chrono::high_resolution_clock::now();
+            //name
+            std::string name = particle_system.name[sampled_index];
+            //double theta = particle_system.theta[sampled_index];
+            //double baryon = particle_system.baryon[sampled_index];
+            //double strange = particle_system.strange[sampled_index];
+            //double charge = particle_system.charge[sampled_index];
+
+            sampled_params.mbar     = particle_system.mass[sampled_index] / T;
+            sampled_params.baryon   = particle_system.baryon[sampled_index];
+            sampled_params.strange  = particle_system.strange[sampled_index];
+            sampled_params.charge   = particle_system.charge[sampled_index];
+            sampled_params.sign     = particle_system.theta[sampled_index];
+        
+            double sampled_pLRF[4] = {0.0, 0.0, 0.0, 0.0};
+            sample_momentum(sampled_params, sampled_pLRF, generator_momentum);
             
-            
-            if(theta == -1.0){
-                auto start_check_weight = std::chrono::high_resolution_clock::now();
-                if(check_weight_region(mbar, omega)){
-                    auto end_check_weight = std::chrono::high_resolution_clock::now();
-                    std::chrono::duration<double> elapsed_check_weight = end_check_weight - start_check_weight;
-                    t_check_weight += elapsed_check_weight.count();
-                    nabove++;
-                    // interpolate max_w
-                    auto start_interpolation = std::chrono::high_resolution_clock::now();
-                    //max_w = get_max_w(mbar, omega);
-                    max_w = max_w_table.bilinear_interpolate(mbar, omega);
-                    auto end_interpolation = std::chrono::high_resolution_clock::now();
-                    std::chrono::duration<double> elapsed_interpolation = end_interpolation - start_interpolation;
-                    t_interpolation += elapsed_interpolation.count();
-                    // check for positive, neutral, negative pions
-                    //if(pid == 211){
-                    //    nabovepp++;
-                    //    //print mbar, omega and max_w
-                    //    std::cout << "mbar: " << mbar << ", omega: " << omega << ", max_w: " << max_w << std::endl;
-                    //}
-                    //if(pid == 111) nabovep0++;
-                    //if(pid == -211) nabovepm++;
-                    ////check for kaons
-                    //if(pid == 321) nabovekp++;
-                    //if(pid == 311) nabovek0++;
-                    //if(pid == -321) nabovekm++;
-                    //if(pid == -311) naboveantik0++;
-                    //std::cout << "max_w: " << max_w << std::endl;
-                }
+
+            double weight_flux = std::max(0.0, lrf.dsigma_t_lrf * sampled_pLRF[0] 
+                                             - lrf.dsigma_x_lrf * sampled_pLRF[1] 
+                                             - lrf.dsigma_y_lrf * sampled_pLRF[2]
+                                             - lrf.dsigma_z_lrf * sampled_pLRF[3])
+                                             /(lrf.dsigma_magnitude * sampled_pLRF[0]);
+
+            double feq = 0.0;
+            double delta_f = 0.0;
+            ///\todo add feq and delta_f calculation
+            //double weight_visc = 0.5*(1.+ delta_f/feq);
+            double weight_visc = 0.5;
+            //boost to lab frame
+            lrf.boost_momentum_to_lab(tau_squared, sampled_pLRF);
+            bool add_particle = (std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_keep) < (weight_flux*weight_visc));
+            double E, pz, yp;
+            if(D == 2 && add_particle)
+            {
+              double random_number = std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_rapidity);
+              yp = y_max*(2.0*random_number - 1.0);
+
+              double sinhy = sinh(yp);
+              double coshy = sqrt(1.0 + sinhy * sinhy);
+
+              double ptau = lrf.pLab_tau;
+              double tau_pn = tau * lrf.pLab_eta;
+              double mT = sqrt(mass*mass  + lrf.pLab_x * lrf.pLab_x + lrf.pLab_y * lrf.pLab_y);
+
+              sinheta = (ptau*sinhy - tau_pn*coshy) / mT;
+              double eta = asinh(sinheta);
+              cosheta = sqrt(1.0 + sinheta * sinheta);
+
+              pz = mT * sinhy;
+              E = mT * coshy;
+              //if pz>5.0, print inf
+                //if(abs(pz) > 200.0){
+                //    std::cout << "Sampled id: " << pid << " name: " << name << std::endl;
+                //    std::cout << "pz: " << pz << " E: " << E << " yp: " << yp << " mT: " << mT << " ptau: " << ptau << " tau_pn: " << tau_pn << "px: " << lrf.pLab_x << " py: " << lrf.pLab_y << std::endl;
+                //    std::cout << "sinhy: " << sinhy << " coshy: " << coshy << " sinheta: " << sinheta << " cosheta: " << cosheta << std::endl;
+                //    std::cout << "mass: " << mass << " eta: " << eta << "peta: " << lrf.pLab_eta << std::endl;
+                //}
+              //cout << pz << "\t" << tau_pn * cosheta  +  ptau * sinheta << endl;
             }
-            auto end_weight = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> elapsed_weight = end_weight - start_weight;
-            t_renormalization += elapsed_weight.count();
-            
-            bool rejected = true;
-            double pbar, Ebar, kbar, phi_over_2pi, costheta, weight;
-            auto start_acceptance = std::chrono::high_resolution_clock::now();
-            //pions 
-            ///@todo: check which value is correct
-            if(mbar <= 1.008){
-                while(rejected)
-                {
-                    tryes++;
-                    double r1= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
-                    double r2= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
-                    double r3= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
-
-                    double l1 = log(r1);
-                    double l2 = log(r2);
-                    double l3 = log(r3);
-
-                    double l1_plus_l2 = l1 + l2;
-
-                    pbar = - (l1 + l2 + l3);
-                    Ebar = sqrt(pbar * pbar  +  mbar*mbar);
-
-                    phi_over_2pi = l1_plus_l2 * l1_plus_l2 / (pbar * pbar);
-                    costheta = (l1 - l2) / l1_plus_l2;
-
-                    weight = 1.0 / (exp(Ebar-omega) + theta) / max_w / (r1 * r2 * r3);
-
-
-                    // check pLRF acceptance
-                    if(std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum) < weight) break;
-
-                } // rejection loop
-                accepted++;
-
+            else
+            {
+              pz = tau * lrf.pLab_eta  * cosheta  +  lrf.pLab_tau  * sinheta;
+              E = sqrt(mass * mass + lrf.pLab_x * lrf.pLab_x + lrf.pLab_y * lrf.pLab_y + pz * pz);
+              yp = 0.5 * log((E + pz) / (E - pz));
+              double eta =  surface.eta[icell];
             }
-            else{
-                //heavy particles
-                std::uniform_real_distribution<double> costheta_distribution(-1.0, nextafter(1.0, std::numeric_limits<double>::max()));
 
-                // integrated weights
-                std::vector<double> K_weight;
-                K_weight.resize(3);
-
-                K_weight[0] = mbar*mbar; // heavy (sampled_distribution = 0)
-                K_weight[1] = 2.0 * mbar;   // moderate (sampled_distribution = 1)
-                K_weight[2] = 2.0;          // light (sampled_distribution = 2)
-
-                std::discrete_distribution<int> K_distribution(K_weight.begin(), K_weight.end());
-
-                double kbar;  // kinetic energy / T
-                while(rejected)
-                {
-                    tryes++;
-                    int sampled_distribution = K_distribution(generator_momentum);
-                    // select distribution to sample from based on integrated weights
-                    if(sampled_distribution == 0)
-                    {
-                      // draw k from exp(-k/T).dk by sampling r1
-                      // sample direction uniformly
-                      kbar = - log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
-                      phi_over_2pi = std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
-                      costheta = costheta_distribution(generator_momentum);
-                    } // distribution 1 (very heavy)
-                    else if(sampled_distribution == 1)
-                    {
-                      // draw (k,phi) from k.exp(-k/T).dk.dphi by sampling (r1,r2)
-                      // sample costheta uniformly
-                      double l1 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
-                      double l2 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
-                      kbar = - (l1 + l2);
-                      phi_over_2pi = - l1 / kbar;
-                      costheta = costheta_distribution(generator_momentum);
-                    } // distribution 2 (moderately heavy)
-                    else if(sampled_distribution == 2)
-                    {
-                      // draw (k,phi,costheta) from k^2.exp(-k/T).dk.dphi.dcostheta by sampling (r1,r2,r3)
-                      double l1 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
-                      double l2 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
-                      double l3 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
-                      double l1_plus_l2 = l1 + l2;
-                      kbar = - (l1 + l2 + l3);
-                      phi_over_2pi = l1_plus_l2 * l1_plus_l2 / (kbar * kbar);
-                      costheta = (l1 - l2) / l1_plus_l2;
-                    } // distribution 3 (light)
-                    else
-                    {
-                      printf("Error: did not sample any K distribution\n");
-                      exit(-1);
-                    }
-                    Ebar = kbar + mbar;                        // energy / T
-                    pbar = sqrt(Ebar * Ebar  -  mbar*mbar); // momentum magnitude / T
-                    double exponent = exp(Ebar - omega);
-                    double weight = pbar/Ebar * exponent / (exponent + theta) / max_w;
-                    //if(fabs(weight - 0.5) > 0.5) printf("Sample momemtum error: weight = %f out of bounds\n", weight);
-                    // check pLRF acceptance
-                    if(std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum) < weight) break;
-                } // rejection loop
-                accepted++;
+            double t = tau * cosheta;
+            double z = tau * sinheta;
+            if(add_particle){
+                sampled_px.push_back(lrf.pLab_x);
+                sampled_py.push_back(lrf.pLab_y);
+                sampled_pz.push_back(pz);
+                sampled_E.push_back(E);
+                sampled_x.push_back(surface.x[icell]);
+                sampled_y.push_back(surface.y[icell]);
+                sampled_z.push_back(z);
+                sampled_t.push_back(t);
+                sampled_mass.push_back(mass);
+                sampled_pid.push_back(pid);
             }
-            auto end_acceptance = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double> elapsed_acceptance = end_acceptance - start_acceptance;
-            t_acceptance += elapsed_acceptance.count();
-            double E = Ebar * T;
-            double p = pbar * T;
-            double phi = phi_over_2pi * 2.0 * M_PI;
-            double sintheta = sqrt(1.0  -  costheta * costheta);    // sin(theta)
 
-            double px_lrf = p * sintheta * cos(phi);
-            double py_lrf = p * sintheta * sin(phi);
-            double pz_lrf = p * costheta;
-  
+
+
+
         }
         auto momentum_sampling_end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed_momentum_sampling = momentum_sampling_end - momentum_sampling_start;
@@ -288,42 +206,188 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
 
     t_total += elapsed_total.count();
 
-    std::cout << "Total tryes: " << tryes << std::endl;
+    std::cout << "Total tries: " << tries << std::endl;
     std::cout << "Total accepted: " << accepted << std::endl;
-    std::cout << "Fraction accepted: " << (double)accepted/(double)tryes << std::endl;
+    std::cout << "Fraction accepted: " << (double)accepted/(double)tries << std::endl;
 
     std::cout << "Total sampling time: " << t_total << " seconds" << std::endl;
-    std::cout << "LRF computation time: " << t_lrf << " seconds" << std::endl;
     std::cout << "Integrator computation time: " << t_integrator << " seconds" << std::endl;
     std::cout << "Momentum sampling time: " << t_momentum << " seconds" << std::endl;
     std::cout << "Species sampling time: " << t_species << " seconds" << std::endl;
-    std::cout << "Boost and computation time: " << t_boost << " seconds" << std::endl;
-    std::cout << "Renormalization time: " << t_renormalization << " seconds" << std::endl;
-    std::cout << "Acceptance time: " << t_acceptance << " seconds" << std::endl;
-    std::cout << "Check weight time: " << t_check_weight << " seconds" << std::endl;
-    std::cout << "Interpolation time: " << t_interpolation << " seconds" << std::endl;
 
     std::cout << "Total number of particles sampled: " << Ntot << std::endl;
     std::cout << "Total number of particles from cells: " << Ncell << std::endl;
-    std::cout << "Total number of pions: " << npions << std::endl;
-    std::cout << "Total number of particles above boundary: " << nabove << std::endl;
-    std::cout << "Total number of particles above boundary (pions): " << nabovepp << std::endl;
-    std::cout << "Total number of particles above boundary (neutral): " << nabovep0 << std::endl;
-    std::cout << "Total number of particles above boundary (negative): " << nabovepm << std::endl;
-    std::cout << "Total number of particles above boundary (positive kaons): " << nabovekp << std::endl;
-    std::cout << "Total number of particles above boundary (neutral kaons): " << nabovek0 << std::endl;
-    std::cout << "Total number of particles above boundary (anti kaons): " << naboveantik0 << std::endl;
-    std::cout << "Total number of particles above boundary (negative kaons): " << nabovekm << std::endl;
-    std::cout << "Total number of particles above boundary (bosons): " << nabovebosons << std::endl;
-    std::cout << "Total number of particles above boundary (fermions): " << nabovefermions << std::endl;
-    
-    std::cout << "Total number of particles above boundary2: " << nabove2 << std::endl;
+
+    // Store the sampled data in a file
+    std::ofstream output_file("sampled_particles.dat");
+    output_file << "# event " << 0 << "\n";
+    for (size_t i = 0; i < sampled_pid.size(); i++) {
+        output_file << sampled_pid[i] << " "
+                    << sampled_t[i] << " "
+                    << sampled_x[i] << " "
+                    << sampled_y[i] << " "
+                    << sampled_z[i] << " "
+                    << sampled_mass[i] << " "
+                    << sampled_E[i] << " "
+                    << sampled_px[i] << " "
+                    << sampled_py[i] << " "
+                    << sampled_pz[i] << " " << std::endl;
+    }
+    output_file << "# event " << 0 << " end" << "\n";
+    output_file.close();
+    std::cout << "Massless above: " << nabove << std::endl;
+    std::cout << "Massive above: " << nabove_massive << std::endl;
 }
+
+
+
+void Sampler::sample_momentum(const ThermalParams& params, double pLRF[4], std::default_random_engine& generator_momentum) {
+    
+    double max_w;   
+
+    double mbar = params.mbar;
+    double T = params.T;
+    double omega = (params.baryon * params.alphaB + params.charge * params.alphaQ + params.strange * params.alphaS);
+    double theta = params.sign;
+
+    double MCUT =  1.0067; 
+    ///\todo Determine the correct parameter
+
+    bool rejected = true;
+    double mbar_squared = mbar * mbar;
+    double phi_over_2pi;
+    double pbar, Ebar, phi, costheta, weight;
+    //pion sampling (considered massless)
+    if(mbar <= MCUT){
+        max_w = get_max_w(params);
+        while(rejected)
+        {
+            tries++;
+            
+
+            //generate canonical generate in [0,1), we then subtract from 1 to get (0,1] to avoid log(0)
+            double r1= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
+            double r2= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
+            double r3= 1. - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
+
+            double l1 = log(r1);
+            double l2 = log(r2);
+            double l3 = log(r3);
+
+
+            double l1_plus_l2 = l1 + l2;
+
+            pbar = - (l1 + l2 + l3);
+            Ebar = sqrt(pbar * pbar  +  mbar_squared);
+
+            phi_over_2pi = l1_plus_l2 * l1_plus_l2 / (pbar * pbar);
+            costheta = (l1 - l2) / l1_plus_l2;
+            //using exp(pbar) = 1/ (r1 * r2 * r3)
+            weight = 1.0 / (exp(Ebar-omega) + theta) / max_w / (r1 * r2 * r3);
+            // check pLRF acceptance
+            if(std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum) < weight) break;
+        } // rejection loop
+        accepted++;
+    }
+    else{
+        //heavy particles
+        std::uniform_real_distribution<double> costheta_distribution(-1.0, nextafter(1.0, std::numeric_limits<double>::max()));
+
+        max_w = get_max_w_massive(params);
+
+        // integrated weights
+        std::vector<double> K_weight;
+        K_weight.resize(3);
+        K_weight[0] = mbar*mbar; // heavy (sampled_distribution = 0)
+        K_weight[1] = 2.0 * mbar;   // moderate (sampled_distribution = 1)
+        K_weight[2] = 2.0;          // light (sampled_distribution = 2)
+
+        std::discrete_distribution<int> K_distribution(K_weight.begin(), K_weight.end());
+
+        double kbar;  // kinetic energy / T
+        while(rejected)
+        {
+            tries++;
+            int sampled_distribution = K_distribution(generator_momentum);
+
+            // select distribution to sample from based on integrated weights
+            if(sampled_distribution == 0)
+            {
+              // draw k from exp(-k/T).dk by sampling r1
+              
+              // sample direction uniformly
+              kbar = - log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
+              phi_over_2pi = std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum);
+              costheta = costheta_distribution(generator_momentum);
+            } // distribution 1 (very heavy)
+            else if(sampled_distribution == 1)
+            {
+              // draw (k,phi) from k.exp(-k/T).dk.dphi by sampling (r1,r2)
+
+              // sample costheta uniformly
+              double l1 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
+              double l2 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
+
+              kbar = - (l1 + l2);
+              phi_over_2pi = - l1 / kbar;
+              costheta = costheta_distribution(generator_momentum);
+            } // distribution 2 (moderately heavy)
+            else if(sampled_distribution == 2)
+            {
+              // draw (k,phi,costheta) from k^2.exp(-k/T).dk.dphi.dcostheta by sampling (r1,r2,r3)
+              double l1 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
+              double l2 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
+              double l3 = log(1.0 - std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum));
+
+              double l1_plus_l2 = l1 + l2;
+
+              kbar = - (l1 + l2 + l3);
+              phi_over_2pi = l1_plus_l2 * l1_plus_l2 / (kbar * kbar);
+              costheta = (l1 - l2) / l1_plus_l2;
+            } // distribution 3 (light)
+            else
+            {
+              printf("Error: did not sample any K distribution\n");
+              exit(-1);
+            }
+
+            Ebar = kbar + mbar;                        // energy / T
+            pbar = sqrt(Ebar * Ebar  -  mbar*mbar); // momentum magnitude / T
+            double exponent = exp(Ebar - omega);
+            weight = pbar/Ebar * exponent / (exponent + theta) / max_w;
+
+
+            //if(fabs(weight - 0.5) > 0.5) printf("Sample momemtum error: weight = %f out of bounds\n", weight);
+            // check pLRF acceptance
+            if(std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_momentum) < weight) break;
+        } // rejection loop
+        accepted++;
+    }
+
+
+    double E = Ebar * T;
+    double p = pbar * T;
+    phi = phi_over_2pi * 2.0 * M_PI;          // azimuthal angle
+    double sintheta = sqrt(1.0  -  costheta * costheta);    // sin(theta)
+    double px_lrf = p * sintheta * cos(phi);
+    double py_lrf = p * sintheta * sin(phi);
+    double pz_lrf = p * costheta;
+
+    pLRF[0] = E;
+    pLRF[1] = px_lrf;
+    pLRF[2] = py_lrf;
+    pLRF[3] = pz_lrf;
+
+}
+
+
+
 
 
 bool Sampler::check_weight_region(double mbar, double omega) {
     double boundary_value;
-    if (omega < 0) {
+    double mbar_threshold = 0.8551;
+    if (mbar < mbar_threshold) {
         boundary_value = poly_neg[0] *pow(mbar, 4) + poly_neg[1] * pow(mbar, 3) + poly_neg[2] * pow(mbar, 2) + poly_neg[3] * mbar + poly_neg[4];
     } else {
         boundary_value = poly_pos[0] *pow(mbar, 4) + poly_pos[1] * pow(mbar, 3) + poly_pos[2] * pow(mbar, 2) + poly_pos[3] * mbar + poly_pos[4];
@@ -332,3 +396,47 @@ bool Sampler::check_weight_region(double mbar, double omega) {
 }
 
 
+bool Sampler::check_weight_region_massive(double mbar, double omega) {
+    double boundary_value;
+    double MCUT =  1.0067;
+    ///\todo make a read in parameter maybe?
+    if (mbar < MCUT) {
+        boundary_value =  poly_neg_massive[0] * pow(mbar, 3) + poly_neg_massive[1] * pow(mbar, 2) + poly_neg_massive[2] * mbar + poly_neg_massive[3];
+    } else if(mbar >= MCUT && mbar < 5.1191) {
+        boundary_value = poly_pos_massive_1[0] * pow(mbar, 3) + poly_pos_massive_1[1] * pow(mbar, 2) + poly_pos_massive_1[2] * mbar + poly_pos_massive_1[3];
+    }
+    else{
+        boundary_value = poly_pos_massive_2[0] * mbar + poly_pos_massive_2[1];
+    }
+
+    return omega>boundary_value;
+}
+
+
+
+
+double Sampler::get_max_w(const ThermalParams& params) {
+    double max_w = 1.0;
+    double mbar = params.mbar;
+    double omega = (params.baryon * params.alphaB + params.charge * params.alphaQ + params.strange * params.alphaS);
+    if(params.sign == -1.0){
+        if(check_weight_region(mbar, omega)){
+            nabove++;
+            max_w = max_w_table.bilinear_interpolate(mbar, omega);
+        }
+    }
+    return max_w;
+}
+
+double Sampler::get_max_w_massive(const ThermalParams& params) {
+    double max_w = 1.0;
+    double mbar = params.mbar;
+    double omega = (params.baryon * params.alphaB + params.charge * params.alphaQ + params.strange * params.alphaS);
+    if(params.sign == -1.0){
+        if(check_weight_region_massive(mbar, omega)){
+            nabove_massive++;
+            max_w = max_w_table_massive.bilinear_interpolate(mbar, omega);
+        }
+    }
+    return max_w;
+}
