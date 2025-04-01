@@ -29,13 +29,11 @@ public:
     double dsigma_t_lrf, dsigma_x_lrf, dsigma_y_lrf, dsigma_z_lrf;
     double dsigma_magnitude, dsigma_space;
 
-
     // Uperp and utperp
     double uperp, utperp;
 
-    // momentums
+    // Momentums
     double pLRF_t, pLRF_x, pLRF_y, pLRF_z;
-    // momentum in lab frame
     double pLab_tau, pLab_x, pLab_y, pLab_eta;
 
     LRF(double ut_in, double ux_in, double uy_in, double ueta_in,
@@ -51,13 +49,10 @@ public:
         uperp =  sqrt(ux * ux  +  uy * uy);
         utperp = sqrt(1.0  +  ux * ux  +  uy * uy);
 
-        double sinh_eta = tau * ueta / utperp;
-        double cosh_eta = ut / utperp;
-
-        xt = uperp * cosh_eta;
-        zt = sinh_eta;
-        xeta = uperp * sinh_eta / tau;
-        zeta = cosh_eta / tau;
+        xt = uperp;
+        zt = 1.;
+        xeta = 0;
+        zeta = 1.;
 
         xx = 1.0;
         yx = 0.0;
@@ -77,66 +72,89 @@ public:
         dsigma_n = dsigma_n_in;
     }
 
+    /**
+     * Perform a Lorentz boost of a four-momentum using SMASH formulation
+     * 
+     * @param beta_x, beta_y, beta_z: velocity components (in units of c)
+     * @param p_in: input four-momentum (E, px, py, pz)
+     * @param p_out: boosted four-momentum (output)
+     */
+    void lorentz_boost(double beta_x, double beta_y, double beta_z, 
+                       double p_in[4], double p_out[4]) {
 
-    //void test_orthonormality(double tau_squared) {
-    //    // Test orthonormality of basis vectors
-    //    double u_normal = fabs(ut * ut - ux * ux - uy * uy - tau_squared * ueta * ueta - 1.0);
-    //    double x_normal = fabs(xt * xt - xx * xx - xy * xy - tau_squared * xeta * xeta + 1.0);
-    //    double y_normal = fabs(-yx * yx - yy * yy + 1.0);
-    //    double z_normal = fabs(zt * zt - tau_squared * zeta * zeta + 1.0);
-//
-    //    double u_dot_x = fabs(xt * ut - xx * ux - xy * uy - tau_squared * xeta * ueta);
-    //    double u_dot_y = fabs(-yx * ux - yy * uy);
-    //    double u_dot_z = fabs(zt * ut - tau_squared * zeta * ueta);
-//
-    //    double x_dot_y = fabs(-xx * yx - xy * yy);
-    //    double x_dot_z = fabs(xt * zt - tau_squared * xeta * zeta);
-//
-    //    double u_orthogonal = std::max(u_dot_x, std::max(u_dot_y, u_dot_z));
-    //    double x_orthogonal = std::max(x_dot_y, x_dot_z);
-//
-    //    double epsilon = 1.e-14;
-    //    // Additional checks or logging can be added if needed
-    //}
+        double beta_sq = beta_x * beta_x + beta_y * beta_y + beta_z * beta_z;
+        if (beta_sq >= 1.0) {
+            std::cerr << "Warning: Attempted superluminal boost!" << std::endl;
+            return;
+        }
 
-    void boost_shv_to_lrf(double tau_squared) {
-        // shv_ij_LRF = Xi.shv.Xj
-        shv_xx_lrf = shv_tt * xt * xt + shv_xx * xx * xx + shv_yy * xy * xy + tau_squared * tau_squared * shv_nn * xeta * xeta
-                     + 2.0 * (-xt * (shv_tx * xx + shv_ty * xy) + shv_xy * xx * xy + tau_squared * xeta * (shv_xn * xx + shv_yn * xy - shv_tn * xt));
+        // Compute gamma factor
+        double gamma = 1.0 / sqrt(1.0 - beta_sq);
 
-        shv_xy_lrf = yx * (-shv_tx * xt + shv_xx * xx + shv_xy * xy + tau_squared * shv_xn * xeta)
-                     + yy * (-shv_ty * xt + shv_xy * xx + shv_yy * xy + tau_squared * shv_yn * xeta);
+        // Compute p ⋅ β
+        double p_dot_beta = p_in[1] * beta_x + p_in[2] * beta_y + p_in[3] * beta_z;
 
-        shv_xz_lrf = zt * (shv_tt * xt - shv_tx * xx - shv_ty * xy - tau_squared * shv_tn * xeta)
-                     - tau_squared * zeta * (shv_tn * xt - shv_xn * xx - shv_yn * xy - tau_squared * shv_nn * xeta);
+        // Compute transformed energy (time component)
+        double p0_prime = gamma * (p_in[0] - p_dot_beta);
 
-        shv_yy_lrf = shv_xx * yx * yx + 2.0 * shv_xy * yx * yy + shv_yy * yy * yy;
-        shv_yz_lrf = -zt * (shv_tx * yx + shv_ty * yy) + tau_squared * zeta * (shv_xn * yx + shv_yn * yy);
-        shv_zz_lrf = -(shv_xx_lrf + shv_yy_lrf);
+        // Compute space components
+        double factor = (gamma - 1.0) * p_dot_beta / beta_sq - gamma * p_in[0];
+
+        p_out[0] = p0_prime;
+        p_out[1] = p_in[1] + beta_x * factor;
+        p_out[2] = p_in[2] + beta_y * factor;
+        p_out[3] = p_in[3] + beta_z * factor;
     }
 
-    void boost_dsigma_to_lrf(double tau_squared) {
-        dsigma_t_lrf = dsigma_t * ut + dsigma_x * ux + dsigma_y * uy + dsigma_n * ueta;
-        dsigma_x_lrf = -(dsigma_t * xt + dsigma_x * xx + dsigma_y * xy + dsigma_n * xeta);
-        dsigma_y_lrf = -(dsigma_x * yx + dsigma_y * yy);
-        dsigma_z_lrf = -(dsigma_t * zt + dsigma_n * zeta);
-    }
-
-    void compute_dsigma_magnitude() {
-        dsigma_space = sqrt(dsigma_x_lrf * dsigma_x_lrf + dsigma_y_lrf * dsigma_y_lrf + dsigma_z_lrf * dsigma_z_lrf);
-        dsigma_magnitude = fabs(dsigma_t_lrf) + dsigma_space;
-    }
-
+    /**
+     * Boost particle momentum from LRF to the Lab frame using the new Lorentz boost method.
+     */
     void boost_momentum_to_lab(double tau_squared, double pLRF[4]) {
         pLRF_t = pLRF[0];
         pLRF_x = pLRF[1];
         pLRF_y = pLRF[2];
         pLRF_z = pLRF[3];
 
-        pLab_tau = pLRF_t * ut + pLRF_x * xt + pLRF_z * zt;
-        pLab_x   = pLRF_t * ux + pLRF_x * xx + pLRF_y * yx;
-        pLab_y   = pLRF_t * uy + pLRF_x * xy + pLRF_y * yy;
-        pLab_eta = pLRF_t * ueta + pLRF_x * xeta + pLRF_z * zeta; 
+        double beta_x = ux / ut;
+        double beta_y = uy / ut;
+        double beta_z = ueta / ut;
+
+        double pLab[4];
+        lorentz_boost(beta_x, beta_y, beta_z, pLRF, pLab);
+
+        pLab_tau = pLab[0];
+        pLab_x = pLab[1];
+        pLab_y = pLab[2];
+        pLab_eta = pLab[3];
+    }
+
+    /**
+     * Boost surface element from Lab frame to LRF using Lorentz transformation.
+     */
+    void boost_dsigma_to_lrf(double tau_squared) {
+        double dsigma_lab[4] = {dsigma_t, dsigma_x, dsigma_y, dsigma_n};
+        double dsigma_lrf[4];
+
+        double beta_x = ux / ut;
+        double beta_y = uy / ut;
+        double beta_z = ueta / ut;
+
+        lorentz_boost(-beta_x, -beta_y, -beta_z, dsigma_lab, dsigma_lrf);
+
+        dsigma_t_lrf = dsigma_lrf[0];
+        dsigma_x_lrf = dsigma_lrf[1];
+        dsigma_y_lrf = dsigma_lrf[2];
+        dsigma_z_lrf = dsigma_lrf[3];
+    }
+
+    /**
+     * Compute dsigma magnitude in LRF.
+     */
+    void compute_dsigma_magnitude() {
+        dsigma_space = sqrt(dsigma_x_lrf * dsigma_x_lrf +
+                            dsigma_y_lrf * dsigma_y_lrf +
+                            dsigma_z_lrf * dsigma_z_lrf);
+        dsigma_magnitude = fabs(dsigma_t_lrf) + dsigma_space;
     }
 };
 

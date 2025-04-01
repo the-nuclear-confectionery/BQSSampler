@@ -267,7 +267,7 @@ if __name__ == "__main__":
 
     # Define the (m/T, chem) grid
     mbar_vals = np.linspace(0.1, 20., 1001)
-    chem_vals = np.linspace(-3, 3, 1001)
+    chem_vals = np.linspace(-7, 7, 1001)
 
     # Compute the maximum weight function over the grid
     max_w_values = compute_max_w_grid(mbar_vals, chem_vals, p_grid)
@@ -293,5 +293,5 @@ if __name__ == "__main__":
         print("No valid (mbar, chem) pairs found.")
 
     # Save the filtered table where max_w > 1
-    save_max_w_table(mbar_vals, chem_vals, max_w_values)
+    # save_max_w_table(mbar_vals, chem_vals, max_w_values)
 

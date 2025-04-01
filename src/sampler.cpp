@@ -20,8 +20,9 @@ Sampler::Sampler(){
 
 void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, const NumericalIntegrator& integrator) {
     double y_max = 5.0; // Maximum rapidity
-    int D = 2; // Number of dimensions
+    int D = 3; // Number of dimensions
     int Nsamples = 200;
+    y_max = 0.5;
 
     //resize the sampled particles vector
     sampled_particles.resize(Nsamples);
@@ -63,6 +64,12 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
             std::cout << "Progress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "%" << std::endl;
         }
 
+        //calculate udsigma 
+        double udsigma = surface.ut[icell] * surface.dsigma_t[icell] 
+                       + surface.ux[icell] * surface.dsigma_x[icell] 
+                       + surface.uy[icell] * surface.dsigma_y[icell] 
+                       + surface.ueta[icell] * surface.dsigma_eta[icell];
+        if (udsigma <= 0.0) continue;
         double tau = surface.tau[icell];
         double tau_squared = tau * tau;
         double T = surface.T[icell];
@@ -78,12 +85,18 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
 
         lrf.boost_dsigma_to_lrf(tau_squared);
         lrf.compute_dsigma_magnitude();
-        
+        //std::cout << "dsigma magnitude: " << lrf.dsigma_magnitude << std::endl;
         N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
+        //std::cout << "N_tot_cell: " << N_tot_cell << std::endl;
         if(N_tot_cell <=0.) continue;
         Ncell += N_tot_cell;
- 
-
+        //print all informations from surface
+        //std::cout << "icell: " << icell << " tau: " << tau << " T: " << T << " muB: " << muB << " muS: " << muS << " muQ: " << muQ << std::endl;
+        //std::cout << "dsigma_t: " << surface.dsigma_t[icell] << " dsigma_x: " << surface.dsigma_x[icell] << " dsigma_y: " << surface.dsigma_y[icell] << " dsigma_eta: " << surface.dsigma_eta[icell] << std::endl;
+        //std::cout << "ut: " << surface.ut[icell] << " ux: " << surface.ux[icell] << " uy: " << surface.uy[icell] << " ueta: " << surface.ueta[icell] << std::endl;
+        //std::cout << "dsigma_t_lrf: " << lrf.dsigma_t_lrf << " dsigma_x_lrf: " << lrf.dsigma_x_lrf << " dsigma_y_lrf: " << lrf.dsigma_y_lrf << " dsigma_z_lrf: " << lrf.dsigma_z_lrf << std::endl;
+        //std::cout << "dsigma_magnitude: " << lrf.dsigma_magnitude << std::endl;
+        //std::cout << "N_tot_cell: " << N_tot_cell << std::endl;
 
         std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
         std::discrete_distribution<int> particle_type_distribution(
@@ -175,14 +188,14 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                 }
                 else
                 {
-                  pz = tau * lrf.pLab_eta  * cosheta  +  lrf.pLab_tau  * sinheta;
+                  pz = lrf.pLab_eta;
                   E = sqrt(mass * mass + lrf.pLab_x * lrf.pLab_x + lrf.pLab_y * lrf.pLab_y + pz * pz);
                   yp = 0.5 * log((E + pz) / (E - pz));
                   double eta =  surface.eta[icell];
                 }
 
-                double t = tau * cosheta;
-                double z = tau * sinheta;
+                double t = tau;
+                double z = surface.eta[icell];
                 if(add_particle){
                     double x = surface.x[icell];
                     double y = surface.y[icell];
@@ -414,6 +427,8 @@ double Sampler::get_max_w(const ThermalParams& params) {
         if(check_weight_region(mbar, omega)){
             nabove++;
             max_w = max_w_table.bilinear_interpolate(mbar, omega);
+            //max_w = 1.;
+
         }
     }
     return max_w;
@@ -427,6 +442,7 @@ double Sampler::get_max_w_massive(const ThermalParams& params) {
         if(check_weight_region_massive(mbar, omega)){
             nabove_massive++;
             max_w = max_w_table_massive.bilinear_interpolate(mbar, omega);
+            //max_w = 1.;
         }
     }
     return max_w;
