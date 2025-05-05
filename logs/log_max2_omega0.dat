@@ -1,0 +1,83 @@
+Reading in freezeout surface in CCAKE boost invariant format
+u1.56108 1.1986 0.0174301
+dat: -4.34682 9.67553 10.6383
+u_dot_n: 4.99684
+m_over_sigma: 0.00719784
+Finished reading surface
+Surface data read successfully.
+Number of points: 136867
+
+There are 328 mesons, 325 baryons and 325 antibaryons
+
+Particle list read successfully.
+Number of particles: 978
+Sampling particles...
+Progress: 0%
+Progress: 0% completed
+Progress: 4.99974%
+Progress: 4.99974% completed
+Progress: 9.99949%
+Progress: 9.99949% completed
+Progress: 14.9992%
+Progress: 14.9992% completed
+Progress: 19.999%
+Progress: 19.999% completed
+Progress: 24.9987%
+Progress: 24.9987% completed
+Progress: 29.9985%
+Progress: 29.9985% completed
+Progress: 34.9982%
+Progress: 34.9982% completed
+Progress: 39.998%
+Progress: 39.998% completed
+Progress: 44.9977%
+Progress: 44.9977% completed
+Progress: 49.9974%
+Progress: 49.9974% completed
+Progress: 54.9972%
+Progress: 54.9972% completed
+Progress: 59.9969%
+Progress: 59.9969% completed
+Progress: 64.9967%
+Progress: 64.9967% completed
+Progress: 69.9964%
+Progress: 69.9964% completed
+Progress: 74.9962%
+Progress: 74.9962% completed
+Progress: 79.9959%
+Progress: 79.9959% completed
+Progress: 84.9957%
+Progress: 84.9957% completed
+Progress: 89.9954%
+Progress: 89.9954% completed
+Progress: 94.9951%
+Progress: 94.9951% completed
+Progress: 99.9949%
+Progress: 99.9949% completed
+Total tryes: 130577
+Total accepted: 79956
+Fraction accepted: 0.612328
+Total sampling time: 358.096 seconds
+LRF computation time: 0.0259421 seconds
+Integrator computation time: 352.314 seconds
+Momentum sampling time: 0.168258 seconds
+Species sampling time: 0 seconds
+Boost and computation time: 0.0194909 seconds
+Renormalization time: 0.0277363 seconds
+Acceptance time: 0.0912508 seconds
+Check weight time: 0.00507329 seconds
+Interpolation time: 0.00878689 seconds
+Total number of particles sampled: 79956
+Total number of particles from cells: 79453.9
+Total number of pions: 33080
+Total number of particles above boundary: 30137
+Total number of particles above boundary (pions): 0
+Total number of particles above boundary (neutral): 0
+Total number of particles above boundary (negative): 0
+Total number of particles above boundary (positive kaons): 0
+Total number of particles above boundary (neutral kaons): 0
+Total number of particles above boundary (anti kaons): 0
+Total number of particles above boundary (negative kaons): 0
+Total number of particles above boundary (bosons): 0
+Total number of particles above boundary (fermions): 0
+Total number of particles above boundary2: 0

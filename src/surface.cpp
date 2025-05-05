@@ -5,8 +5,10 @@
 #include <cmath>
 #include "surface.h"
 
+
 /// @brief Construct a Surface object with the given path
-Surface::Surface(const std::string& path) : path(path), npoints(0) {}
+Surface::Surface(const std::string& path , const Settings& settings)
+    : path(path), settings(settings), npoints(0) {}
 
 /// @brief Read data from the surface file
 /// @details This function reads the surface data from a file, processes it, 
@@ -14,7 +16,16 @@ Surface::Surface(const std::string& path) : path(path), npoints(0) {}
 /// average thermodynamic quantities and total surface volume.
 void Surface::read_data()
 {
-    std::cout << "Reading in freezeout surface in CCAKE boost invariant format" << std::endl;
+    int D = settings.get_int("dimension");
+    std::string coordinate_system = settings.get_string("coordinate_system");
+    if (D == 2) std::cout << "Reading surface data in 2D..." << std::endl;
+    else if (D == 3) std::cout << "Reading surface data in 3D..." << std::endl;
+    else throw std::runtime_error("D must be either 2 or 3.");
+
+    //check coordinate system
+    if (coordinate_system == "cartesian") std::cout << "Using cartesian coordinates..." << std::endl;
+    else if (coordinate_system == "hyperbolic") std::cout << "Using hyperbolic coordinates..." << std::endl;
+    else throw std::runtime_error("Coordinate system must be either cartesian or hyperbolic.");
 
     // Open the file to count lines
     // Prepare the file path using stringstream
@@ -159,19 +170,9 @@ void Surface::read_data()
         double dan = aux_dsigma_eta;
 
         double udsigma = aux_ut * dat + aux_ux * dax + aux_uy * day + aux_ueta * dan;
-        double dsigma_dsigma = dat * dat - dax * dax - day * day - dan * dan ;
-        double dsigma_magnitude = fabs(udsigma) + sqrt(fabs(udsigma * udsigma - dsigma_dsigma));
-        aux_u_dot_dsigma = udsigma;
-        total_surface_volume += dsigma_magnitude;
 
-        E_average += (aux_E * dsigma_magnitude);
-        T_average += (aux_T * dsigma_magnitude);
-        P_average += (aux_P * dsigma_magnitude);
-        muB_average += (aux_muB * dsigma_magnitude);
-        muQ_average += (aux_muQ * dsigma_magnitude);  // muQ is not computed here
-        muS_average += (aux_muS * dsigma_magnitude);  // muS is not computed here
-        nB_average += (0.0 * dsigma_magnitude);  // nB is not computed here
-        
+        aux_u_dot_dsigma = udsigma;
+
         // Store the data in the vectors
         tau.push_back(aux_tau);
         x.push_back(aux_x);
@@ -221,16 +222,8 @@ void Surface::read_data()
     surface_file.close();
     std::cout << "Midrapidity cells: " << etacount << "out of" << npoints << std::endl;
     // Write averaged thermodynamic quantities to file
-    T_average /= total_surface_volume;
-    E_average /= total_surface_volume;
-    P_average /= total_surface_volume;
-    muB_average /= total_surface_volume;
-    muS_average /= total_surface_volume;
-    muQ_average /= total_surface_volume;
-    nB_average /= total_surface_volume;
+
 
     std::cout << "Finished reading surface" << std::endl;
-    std::ofstream thermal_average("average_thermodynamic_quantities.dat", std::ios_base::out);
-    thermal_average << std::setprecision(15) << T_average << "\n" << E_average << "\n" << P_average << "\n" << muB_average << "\n" << nB_average;
-    thermal_average.close();
+
 }

@@ -3,26 +3,29 @@
 
 
 // Constructor implementation
-Sampler::Sampler(){
+Sampler::Sampler(const Settings& settings): settings(settings) 
+{
     // Initialize the random number generator with a seed based on the current time
 
     sampler_seed =  static_cast<unsigned>(
             std::chrono::system_clock::now().time_since_epoch().count() );
-            max_w_table.load_from_file("../utils/max_w_table.dat");
-            max_w_table_massive.load_from_file("../utils/max_w_table_massive.dat");
-    sampler_seed = 123123;
+            max_w_table.load_from_file("../tables/max_w_table.dat");
+            max_w_table_massive.load_from_file("../tables/max_w_table_massive.dat");
     accepted = 0;
     tries = 0;
     nabove = 0;
     nabove_massive = 0;
+
+    Nsamples = settings.get_int("samples");
+    D = settings.get_int("dimension");
+    y_max = settings.get_double("y_max");
+    if (D==3) y_max = 0.5; // we use 2.*ymax, canceling this parameter for 3D (where there is a y size)
     
 }
 
 void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, const NumericalIntegrator& integrator) {
-    double y_max = 5.0; // Maximum rapidity
-    int D = 3; // Number of dimensions
-    int Nsamples = 200;
-    y_max = 0.5;
+    
+    std::string coordinate_system = settings.get_string("coordinate_system");
 
     //resize the sampled particles vector
     sampled_particles.resize(Nsamples);
@@ -48,7 +51,8 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
     auto start_total = std::chrono::high_resolution_clock::now();
 
     for (int icell = 0; icell < surface.npoints; icell++) {
-        LRF lrf(surface.ut[icell],
+        LRF lrf(coordinate_system,
+                surface.ut[icell],
                 surface.ux[icell],
                 surface.uy[icell],
                 surface.ueta[icell],
@@ -59,10 +63,6 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                 surface.tau[icell]);
         double sinheta = sinh(surface.eta[icell]);
         double cosheta = sqrt(1.0  +  sinheta * sinheta);
-
-        if (icell % (surface.npoints / 20) == 0) {
-            std::cout << "Progress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "%" << std::endl;
-        }
 
         //calculate udsigma 
         double udsigma = surface.ut[icell] * surface.dsigma_t[icell] 
@@ -85,18 +85,10 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
 
         lrf.boost_dsigma_to_lrf(tau_squared);
         lrf.compute_dsigma_magnitude();
-        //std::cout << "dsigma magnitude: " << lrf.dsigma_magnitude << std::endl;
+
         N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
-        //std::cout << "N_tot_cell: " << N_tot_cell << std::endl;
         if(N_tot_cell <=0.) continue;
         Ncell += N_tot_cell;
-        //print all informations from surface
-        //std::cout << "icell: " << icell << " tau: " << tau << " T: " << T << " muB: " << muB << " muS: " << muS << " muQ: " << muQ << std::endl;
-        //std::cout << "dsigma_t: " << surface.dsigma_t[icell] << " dsigma_x: " << surface.dsigma_x[icell] << " dsigma_y: " << surface.dsigma_y[icell] << " dsigma_eta: " << surface.dsigma_eta[icell] << std::endl;
-        //std::cout << "ut: " << surface.ut[icell] << " ux: " << surface.ux[icell] << " uy: " << surface.uy[icell] << " ueta: " << surface.ueta[icell] << std::endl;
-        //std::cout << "dsigma_t_lrf: " << lrf.dsigma_t_lrf << " dsigma_x_lrf: " << lrf.dsigma_x_lrf << " dsigma_y_lrf: " << lrf.dsigma_y_lrf << " dsigma_z_lrf: " << lrf.dsigma_z_lrf << std::endl;
-        //std::cout << "dsigma_magnitude: " << lrf.dsigma_magnitude << std::endl;
-        //std::cout << "N_tot_cell: " << N_tot_cell << std::endl;
 
         std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
         std::discrete_distribution<int> particle_type_distribution(
@@ -158,7 +150,7 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                 //boost to lab frame
                 lrf.boost_momentum_to_lab(tau_squared, sampled_pLRF);
                 bool add_particle = (std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_keep) < (weight_flux*weight_visc));
-                double E, pz, yp;
+                double E=0, pz=0, yp=0;
                 if(D == 2 && add_particle)
                 {
                   double random_number = std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_rapidity);
@@ -177,25 +169,32 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
 
                   pz = mT * sinhy;
                   E = mT * coshy;
-                  //if pz>5.0, print inf
-                    //if(abs(pz) > 200.0){
-                    //    std::cout << "Sampled id: " << pid << " name: " << name << std::endl;
-                    //    std::cout << "pz: " << pz << " E: " << E << " yp: " << yp << " mT: " << mT << " ptau: " << ptau << " tau_pn: " << tau_pn << "px: " << lrf.pLab_x << " py: " << lrf.pLab_y << std::endl;
-                    //    std::cout << "sinhy: " << sinhy << " coshy: " << coshy << " sinheta: " << sinheta << " cosheta: " << cosheta << std::endl;
-                    //    std::cout << "mass: " << mass << " eta: " << eta << "peta: " << lrf.pLab_eta << std::endl;
-                    //}
-                  //cout << pz << "\t" << tau_pn * cosheta  +  ptau * sinheta << endl;
                 }
-                else
+                else if (D==3 && add_particle)
                 {
-                  pz = lrf.pLab_eta;
+                    
+                  if (coordinate_system == "cartesian"){
+                    pz = lrf.pLab_eta;
+                  }
+                  else{
+                    pz = tau * lrf.pLab_eta  * cosheta  +  lrf.pLab_tau  * sinheta;
+                  }
+                  //
                   E = sqrt(mass * mass + lrf.pLab_x * lrf.pLab_x + lrf.pLab_y * lrf.pLab_y + pz * pz);
                   yp = 0.5 * log((E + pz) / (E - pz));
-                  double eta =  surface.eta[icell];
+                  double eta = surface.eta[icell];
                 }
 
-                double t = tau;
-                double z = surface.eta[icell];
+                double t,z;
+                if(coordinate_system == "cartesian"){
+                    t = tau;
+                    z = surface.eta[icell];
+                }
+                else{
+                    t = tau * cosheta;
+                    z = tau * sinheta;
+                }
+
                 if(add_particle){
                     double x = surface.x[icell];
                     double y = surface.y[icell];
@@ -236,7 +235,7 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
     std::cout << "Massless above: " << nabove << std::endl;
     std::cout << "Massive above: " << nabove_massive << std::endl;
 
-    std::string filename = "sampled_particles.dat";
+    std::string filename = settings.get_string("output_file");
     std::cout << "Saving sampled particles to " << filename << std::endl;
     save_particles(filename);
 

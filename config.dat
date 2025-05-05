@@ -1,0 +1,14 @@
+# Simulation control
+dimension 3
+seed -1
+mode sample
+coordinate_system cartesian
+y_max 5
+samples 200
+delta_f_shear false
+
+# File paths
+input_file /u/kpala/git_repos/test/test2/CCAKE/build/def/cart_19p6_0p5_d/freeze_out.dat
+output_file output_particles_0.dat
+tables_path /u/kpala/git_repos/particlizer/tables
+

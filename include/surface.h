@@ -5,6 +5,7 @@
 #include <string>
 #include <fstream>
 #include <stdexcept>
+#include "settings.h"
 #include "globals.h"
 
 // A single surface point's data
@@ -25,7 +26,11 @@ struct SurfacePoint {
 class Surface {
 public:
     // Constructor to initialize the path
-    Surface(const std::string& path);
+    Surface(const std::string& path, const Settings& settings);
+
+    //store settings reference
+    const Settings& settings;
+
 
     // Method to read data from the file
     void read_data();

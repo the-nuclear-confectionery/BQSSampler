@@ -14,12 +14,13 @@
 #include "lrf.h"
 #include "tools.h"
 #include "tables.h"
+#include "settings.h"
 
 
 class Sampler {
 public:
     // Constructor that takes a Surface object reference
-    Sampler();
+    Sampler(const Settings& settings);
 
 
     // Method to sample 
@@ -38,6 +39,8 @@ public:
 
 
 private:
+    //settings reference
+    const Settings& settings;
 
     unsigned sampler_seed;  // Store the random number
     double poly_neg[5] = {-0.04357527, 0.03834501, -0.07525446, 0.8744597, -0.69273194};
@@ -52,6 +55,10 @@ private:
 
     int nabove;
     int nabove_massive;
+
+    double y_max;
+    int D;
+    int Nsamples;
 
     Table2D max_w_table;
     Table2D max_w_table_massive;

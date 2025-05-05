@@ -24,6 +24,7 @@ set(SOURCES
     src/numerical_integrator.cpp
     src/tools.cpp
     src/tables.cpp
+    src/settings.cpp
 )
 
 # Create the executable
