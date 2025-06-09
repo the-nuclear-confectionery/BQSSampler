@@ -449,22 +449,23 @@ double Sampler::get_max_w_massive(const ThermalParams& params) {
 
 
 void Sampler::save_particles(const std::string& filename) const {
-    std::ofstream output_file(filename);
-    for (size_t i = 0; i < sampled_particles.size(); i++) {
-        output_file << "# event " << i << "\n";
-        for (size_t j = 0; j < sampled_particles[i].size(); j++) {
-            output_file << sampled_particles[i][j].pid << " "
-                        << sampled_particles[i][j].t << " "
-                        << sampled_particles[i][j].x << " "
-                        << sampled_particles[i][j].y << " "
-                        << sampled_particles[i][j].z << " "
-                        << sampled_particles[i][j].mass << " "
-                        << sampled_particles[i][j].E << " "
-                        << sampled_particles[i][j].px << " "
-                        << sampled_particles[i][j].py << " "
-                        << sampled_particles[i][j].pz << " " << std::endl;
-        }
-        output_file << "# event " << i << " end" << "\n";
+    FILE* f = fopen(filename.c_str(), "w");
+    if (!f) {
+        perror("Error opening file for writing");
+        return;
     }
-    output_file.close();
+
+    for (size_t i = 0; i < sampled_particles.size(); ++i) {
+        fprintf(f, "# event %zu\n", i);
+
+        for (const auto& p : sampled_particles[i]) {
+            // write each particle as a single line
+            fprintf(f, "%d %.10f %.10f %.10f %.10f %.10f %.10f %.10f %.10f %.10f\n",
+                    p.pid, p.t, p.x, p.y, p.z, p.mass, p.E, p.px, p.py, p.pz);
+        }
+
+        fprintf(f, "# event %zu end\n", i);
+    }
+
+    fclose(f);
 }

@@ -89,48 +89,6 @@ public:
     }
 
 
-    //void test_orthonormality(double tau_squared) {
-    //    // Test orthonormality of basis vectors
-    //    double u_normal = fabs(ut * ut - ux * ux - uy * uy - tau_squared * ueta * ueta - 1.0);
-    //    double x_normal = fabs(xt * xt - xx * xx - xy * xy - tau_squared * xeta * xeta + 1.0);
-    //    double y_normal = fabs(-yx * yx - yy * yy + 1.0);
-    //    double z_normal = fabs(zt * zt - tau_squared * zeta * zeta + 1.0);
-//
-    //    double u_dot_x = fabs(xt * ut - xx * ux - xy * uy - tau_squared * xeta * ueta);
-    //    double u_dot_y = fabs(-yx * ux - yy * uy);
-    //    double u_dot_z = fabs(zt * ut - tau_squared * zeta * ueta);
-//
-    //    double x_dot_y = fabs(-xx * yx - xy * yy);
-    //    double x_dot_z = fabs(xt * zt - tau_squared * xeta * zeta);
-//
-    //    double u_orthogonal = std::max(u_dot_x, std::max(u_dot_y, u_dot_z));
-    //    double x_orthogonal = std::max(x_dot_y, x_dot_z);
-//
-    //    double epsilon = 1.e-14;
-    //    // Additional checks or logging can be added if needed
-    //}
-
-    /// \todo rewrite this for generic metric
-    void boost_shv_to_lrf(double tau_squared) {
-        // shv_ij_LRF = Xi.shv.Xj
-        if(coordinate_system == "cartesian"){
-            tau_squared = 1.0;
-        }
-
-
-        shv_xx_lrf = shv_tt * xt * xt + shv_xx * xx * xx + shv_yy * xy * xy + tau_squared * tau_squared * shv_nn * xeta * xeta
-                     + 2.0 * (-xt * (shv_tx * xx + shv_ty * xy) + shv_xy * xx * xy + tau_squared * xeta * (shv_xn * xx + shv_yn * xy - shv_tn * xt));
-
-        shv_xy_lrf = yx * (-shv_tx * xt + shv_xx * xx + shv_xy * xy + tau_squared * shv_xn * xeta)
-                     + yy * (-shv_ty * xt + shv_xy * xx + shv_yy * xy + tau_squared * shv_yn * xeta);
-
-        shv_xz_lrf = zt * (shv_tt * xt - shv_tx * xx - shv_ty * xy - tau_squared * shv_tn * xeta)
-                     - tau_squared * zeta * (shv_tn * xt - shv_xn * xx - shv_yn * xy - tau_squared * shv_nn * xeta);
-
-        shv_yy_lrf = shv_xx * yx * yx + 2.0 * shv_xy * yx * yy + shv_yy * yy * yy;
-        shv_yz_lrf = -zt * (shv_tx * yx + shv_ty * yy) + tau_squared * zeta * (shv_xn * yx + shv_yn * yy);
-        shv_zz_lrf = -(shv_xx_lrf + shv_yy_lrf);
-    }
 
     void boost_dsigma_to_lrf(double tau_squared) {
         dsigma_t_lrf = dsigma_t * ut + dsigma_x * ux + dsigma_y * uy + dsigma_n * ueta;
@@ -155,6 +113,51 @@ public:
         pLab_y   = pLRF_t * uy + pLRF_x * xy + pLRF_y * yy;
         pLab_eta = pLRF_t * ueta + pLRF_x * xeta + pLRF_z * zeta; 
     }
+
+    void boost_pimunu_to_lrf(double tau_squared) {
+        double g33 = -1.0;
+        if (coordinate_system == "hyperbolic") {
+            g33 = -tau_squared;
+        }
+
+        shv_xx_lrf = shv_tt * xt * xt
+                   + shv_xx * xx * xx
+                   + shv_yy * xy * xy
+                   + g33 * g33 * shv_nn * xeta * xeta
+                   + 2.0 * ( -xt * (shv_tx * xx + shv_ty * xy)
+                             + shv_xy * xx * xy
+                             - g33 * xeta * (shv_xn * xx + shv_yn * xy - shv_tn * xt) );
+
+        shv_xy_lrf = yx * ( -shv_tx * xt + shv_xx * xx + shv_xy * xy - g33 * shv_xn * xeta )
+                   + yy * ( -shv_ty * xt + shv_xy * xx + shv_yy * xy - g33 * shv_yn * xeta );
+
+        shv_xz_lrf = zt * ( shv_tt * xt - shv_tx * xx - shv_ty * xy + g33 * shv_tn * xeta )
+                   + g33 * zeta * ( shv_tn * xt - shv_xn * xx - shv_yn * xy + g33 * shv_nn * xeta );
+
+        shv_yy_lrf = shv_xx * yx * yx + 2.0 * shv_xy * yx * yy + shv_yy * yy * yy;
+
+        shv_yz_lrf = -zt * ( shv_tx * yx + shv_ty * yy )
+                     -g33 * zeta * ( shv_xn * yx + shv_yn * yy );
+
+        shv_zz_lrf = - ( shv_xx_lrf + shv_yy_lrf );
+    }
+
+
+    void boost_Vmu_to_lrf(double tau_squared, double Vt, double Vx, double Vy, double Vn,
+                          double& Vx_LRF, double& Vy_LRF, double& Vz_LRF) {
+        double g33 = -1.0;
+        if (coordinate_system == "hyperbolic") {
+            g33 = -tau_squared;
+        }
+
+        // V^i_LRF = - X^i_mu * V^mu
+        Vx_LRF = - Vt * xt + Vx * xx + Vy * xy - g33 * Vn * xeta;
+        Vy_LRF = Vx * yx + Vy * yy;
+        Vz_LRF = - Vt * zt - g33 * Vn * zeta;
+    }
+
+
 };
 
 #endif
+

@@ -6,7 +6,7 @@
 #include <chrono>
 #include <random>
 #include <sstream>
-
+#include <cstdio> 
 
 #include "surface.h"
 #include "particle.h"
