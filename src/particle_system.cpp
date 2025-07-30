@@ -123,6 +123,35 @@ void ParticleSystem::display_all_particles() const {
     }
 }
 
+
+/// @brief Copy a particle from this ParticleSystem to another ParticleSystem
+/// @details This function copies the properties of a particle at a given index
+/// from this ParticleSystem to the destination ParticleSystem.
+/// @param index The index of the particle to copy
+/// @param dest The destination ParticleSystem to which the particle will be copied
+void ParticleSystem::copy_particle(int index, ParticleSystem& dest) const {
+    if (index < 0 || index >= static_cast<int>(pid.size())) {
+        throw std::out_of_range("ParticleSystem::copy_particle index out of bounds");
+    }
+    dest.pid.push_back(pid[index]);
+    dest.name.push_back(name[index]);
+    dest.mass.push_back(mass[index]);
+    dest.width.push_back(width[index]);
+    dest.spin_degeneracy.push_back(spin_degeneracy[index]);
+    dest.baryon.push_back(baryon[index]);
+    dest.strange.push_back(strange[index]);
+    dest.charm.push_back(charm[index]);
+    dest.bottom.push_back(bottom[index]);
+    dest.isospin_degeneracy.push_back(isospin_degeneracy[index]);
+    dest.charge.push_back(charge[index]);
+    dest.decays.push_back(decays[index]);
+    dest.theta.push_back(theta[index]);
+    dest.particle_species_number.push_back(0.0);
+    dest.equilibrium_density.push_back(0.0);
+    dest.nparticles++;
+}
+
+
 // @brief  Calculate the equilibrium density of all particles
 /// @details Calculate the equilibrium density of the particle species
 /// in a given freeze out cell. The equilibrium density integral is 

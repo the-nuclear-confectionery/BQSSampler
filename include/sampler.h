@@ -25,6 +25,7 @@ public:
 
     // Method to sample 
     void sample(ParticleSystem& particle_system, const Surface& surface, const NumericalIntegrator& integrator);
+    void conserved_charge_sampling(ParticleSystem& particle_system,  Surface& surface, const NumericalIntegrator& integrator);
 
     bool check_weight_region(double mbar, double omega);
     bool check_weight_region_massive(double mbar, double omega);
@@ -36,7 +37,22 @@ public:
 
 
     void save_particles(const std::string& filename) const;
+    void calculate_integrated_ntot(ParticleSystem& particle_system, Surface& surface, const NumericalIntegrator& integrator);
 
+    void check_total_charge_average(double totalB, double totalS, double totalQ, int Nsamples);
+
+
+
+    std::vector<Particle> sample_fixed_yield_from_surface(
+    const ParticleSystem& group,
+    const Surface& surface,
+    const std::vector<double>& N_cell_vector,
+    int required,
+    const std::string& coord);
+
+    double net_baryon(const std::vector<Particle>& particles);
+    double net_strangeness(const std::vector<Particle>& particles);
+    double net_charge(const std::vector<Particle>& particles);
 
 private:
     //settings reference
@@ -66,6 +82,12 @@ private:
     //sampled particle vectors
     std::vector< std::vector <Particle> > sampled_particles;
 
+    std::default_random_engine gen_poisson;
+    std::default_random_engine gen_type;
+    std::default_random_engine gen_mom;
+    std::default_random_engine gen_keep;
+    std::default_random_engine gen_y;
+    std::default_random_engine gen_trim;
 
 };
 

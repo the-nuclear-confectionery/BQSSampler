@@ -57,6 +57,10 @@ void Table2D::load_from_file(const std::string& filename) {
 
 double Table2D::bilinear_interpolate(double x, double y) const {
     if (x < x_min || x > x_max || y < y_min || y > y_max) {
+        std::cerr << "Warning: Interpolation point out of bounds. "
+                  <<  "x: " << x << ", y: " << y
+                  << ", valid range x: [" << x_min << ", " << x_max << "] y [" << y_min << ", " << y_max << "]\n";
+        // Optionally, 
         throw std::out_of_range("Interpolation point out of table bounds.");
     }
 

@@ -21,9 +21,13 @@ public:
     double x;                // x-coordinate
     double y;                // y-coordinate
     double z;                // z-coordinate
+    double    baryon;           // Baryon number
+    double    strange;          // Strange quark number
+    double    charge;           // Electric charge
 
     // Constructor
-    Particle(int pid, double mass, double E, double px, double py, double pz, double t, double x, double y, double z);
+    Particle() = default;
+    Particle(int pid, double mass, double E, double px, double py, double pz, double t, double x, double y, double z, double baryon, double strange, double charge);
 
 };
 

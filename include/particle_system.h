@@ -41,6 +41,8 @@ public:
 
     double calculate_particle_number(double T, double muB, double muQ, double muS, const NumericalIntegrator& integrator);
 
+
+    void copy_particle(int index, ParticleSystem& dest) const;
 };
 
 

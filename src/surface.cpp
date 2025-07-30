@@ -189,9 +189,9 @@ void Surface::read_data()
         E.push_back(aux_E);
         T.push_back(aux_T);
         P.push_back(aux_P);
-        muB.push_back(aux_muB);
-        muS.push_back(aux_muS);
-        muQ.push_back(aux_muQ);
+        muB.push_back(0);
+        muS.push_back(0);
+        muQ.push_back(0);
         u_dot_dsigma.push_back(aux_u_dot_dsigma);
         bulk.push_back(aux_bulk);
         shv_tt.push_back(aux_shv_tt);
@@ -204,6 +204,13 @@ void Surface::read_data()
         shv_yy.push_back(aux_shv_yy);
         shv_yeta.push_back(aux_shv_yeta);
         shv_etaeta.push_back(aux_shv_etaeta);
+        N_baryons_cell.push_back(0.0);
+        N_antibaryons_cell.push_back(0.0);
+        N_strange_mesons_sminus_cell.push_back(0.0);
+        N_strange_mesons_splus_cell.push_back(0.0);
+        N_charged_mesons_qplus_cell.push_back(0.0);
+        N_charged_mesons_qminus_cell.push_back(0.0);
+        N_neutral_mesons_cell.push_back(0.0);
         //print all data
         //std::cout << "tau: " << aux_tau << " x: " << aux_x << " y: " << aux_y << " eta: " << aux_eta << std::endl;
         //std::cout << "ut: " << aux_ut << " ux: " << aux_ux << " uy: " << aux_uy << " ueta: " << aux_ueta << std::endl;
@@ -220,8 +227,6 @@ void Surface::read_data()
     }
 
     surface_file.close();
-    std::cout << "Midrapidity cells: " << etacount << "out of" << npoints << std::endl;
-    // Write averaged thermodynamic quantities to file
 
 
     std::cout << "Finished reading surface" << std::endl;

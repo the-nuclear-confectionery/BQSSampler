@@ -2,13 +2,15 @@
 dimension 3
 seed -1
 mode sample
-coordinate_system cartesian
+coordinate_system hyperbolic
 y_max 5
-samples 200
+samples 1
 delta_f_shear false
+delta_f_diffusion false
+sampling_method conserved_charge
 
 # File paths
-input_file /u/kpala/git_repos/test/test2/CCAKE/build/def/cart_19p6_0p5_d/freeze_out.dat
-output_file output_particles_0.dat
+input_file /projects/bbkr/kpala/conv/ic_200/x_p2_eta_p24/freeze_out.dat
+output_file /u/kpala/git_repos/particlizer/build/conv_sph/200/output_524.dat
 tables_path /u/kpala/git_repos/particlizer/tables
 

@@ -61,7 +61,14 @@ int main(int argc, char** argv) {
     // Create a Sampler object
     Sampler sampler(config);
     // Sample particles from the particle system
-    sampler.sample(particle_system, surface, integrator);
+    if (config.get_string("sampling_method") == "conserved_charge") {
+        std::cout << "Using conserved charge sampling method." << std::endl;
+        sampler.conserved_charge_sampling(particle_system, surface, integrator);
+    } else {
+        std::cout << "Using regular sampling method." << std::endl;
+        sampler.sample(particle_system, surface, integrator);
+    }
+
 
     return 0;
 }
