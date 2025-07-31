@@ -26,6 +26,7 @@ public:
     // Method to sample 
     void sample(ParticleSystem& particle_system, const Surface& surface, const NumericalIntegrator& integrator);
     void conserved_charge_sampling(ParticleSystem& particle_system,  Surface& surface, const NumericalIntegrator& integrator);
+    void sample_unconstrained(ParticleSystem& all_particles, Surface& surface, const NumericalIntegrator& integrator);
 
     bool check_weight_region(double mbar, double omega);
     bool check_weight_region_massive(double mbar, double omega);

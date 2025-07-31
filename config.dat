@@ -1,16 +1,21 @@
-# Simulation control
-dimension 3
-seed -1
-mode sample
+# Surface parameters
+mode ccakev1
 coordinate_system hyperbolic
-y_max 5
-samples 1
+dimension 2
+use_mub true
+use_mus true
+use_muq true
+
+# Sampling parameters
+samples 5000
+sampling_method regular
 delta_f_shear false
-delta_f_diffusion false
-sampling_method conserved_charge
+
+# Numerical parameters
+seed -1
+y_max 5
 
 # File paths
-input_file /projects/bbkr/kpala/conv/ic_200/x_p2_eta_p24/freeze_out.dat
-output_file /u/kpala/git_repos/particlizer/build/conv_sph/200/output_524.dat
+input_file /projects/bbkr/kpala/run_paper/CCAKE/event_23/freeze_out_e/sbvfreezeout_ev0.dat
+output_file /work/hdd/beqi/kpala/conv/output_particles_aa.dat
 tables_path /u/kpala/git_repos/particlizer/tables
-

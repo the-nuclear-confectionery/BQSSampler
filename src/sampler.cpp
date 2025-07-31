@@ -109,7 +109,6 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
         lrf.compute_dsigma_magnitude();
 
         N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
-        std::cout << "Cell " << icell << ": N_tot_cell = " << N_tot_cell << std::endl;
         if(N_tot_cell <=0.) continue;
         Ncell += N_tot_cell;
 
@@ -130,7 +129,6 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
             std::vector<Particle> single_sample_particles;
 
             int N_hadrons = poisson_hadrons(generator_poisson);
-            std::cout << "Sampling " << N_hadrons << " hadrons in cell " << icell << std::endl;
             Ntot += N_hadrons;
 
             //Create thermal parms struct for the sampled particles
@@ -180,7 +178,6 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
                 {
                   double random_number = std::generate_canonical<double, std::numeric_limits<double>::digits>(generator_rapidity);
                   yp = y_max*(2.0*random_number - 1.0);
-
                   double sinhy = sinh(yp);
                   double coshy = sqrt(1.0 + sinhy * sinhy);
 
@@ -270,6 +267,81 @@ void Sampler::sample(ParticleSystem& particle_system, const Surface& surface, co
     save_particles(filename);
 }
 
+void Sampler::sample_unconstrained(ParticleSystem& all_particles,
+                                   Surface& surface,
+                                   const NumericalIntegrator& integrator)
+{
+    std::string coordinate_system = settings.get_string("coordinate_system");
+    sampled_particles.resize(Nsamples);
+
+    if (surface.npoints <= 0) throw std::runtime_error("surface.npoints is zero or negative");
+
+
+    // --- Step 1: Compute cell integrals
+    std::vector<double>& N_cell = surface.N_all_particles_cell;
+    N_cell.resize(surface.npoints, 0.0);
+    double N_skip = 0.0;
+    std::cout << "Calculating surface cell integrals ..." << std::endl;
+    for (int icell = 0; icell < surface.npoints; ++icell) {
+
+        //print percentage of progress
+        if (icell % (surface.npoints / 20) == 0) {
+            std::cout << "Integration progress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "% completed" << std::endl;
+        }
+
+        double udsigma = surface.ut[icell] * surface.dsigma_t[icell]
+                       + surface.ux[icell] * surface.dsigma_x[icell]
+                       + surface.uy[icell] * surface.dsigma_y[icell]
+                       + surface.ueta[icell] * surface.dsigma_eta[icell];
+
+        if (udsigma <= 0.0){
+            N_skip += 1.;
+            continue;
+        }
+
+        double T   = surface.T[icell];
+        double muB = surface.muB[icell];
+        double muS = surface.muS[icell];
+        double muQ = surface.muQ[icell];
+
+        double N = all_particles.calculate_particle_number(T, muB, muS, muQ, integrator);
+        N_cell[icell] = N;
+    }
+    std::cout << "Finished calculating surface cell integrals." << std::endl;
+    // --- Step 2: Sample events ---
+    double total_B = 0, total_S = 0, total_Q = 0;
+    std::cout << "Sampling events with Nsamples = " << Nsamples << std::endl;
+    for (int isample = 0; isample < Nsamples; ++isample) {
+        //print percentage of samples sampled 
+        int progress_step = std::max(1, Nsamples / 20);
+        if (isample % progress_step == 0) {
+            std::cout << "Sampling progress: " << (static_cast<double>(isample) / Nsamples) * 100 << "% completed" << std::endl;
+        }
+        std::vector<Particle> event = sample_fixed_yield_from_surface(
+            all_particles, surface, N_cell, -1, coordinate_system);
+
+        // Accumulate total BSQ
+        for (const auto& p : event) {
+            total_B += p.baryon;
+            total_S += p.strange;
+            total_Q += p.charge;
+        }
+
+        sampled_particles[isample] = std::move(event);
+    }
+
+    // --- Step 3: Charge check and save ---
+    std::cout << "Finished sampling events." << std::endl;
+    check_total_charge_average(total_B, total_S, total_Q, Nsamples);
+
+    std::string filename = settings.get_string("output_file");
+    std::cout << "Saving sampled particles to " << filename << std::endl;
+    //print the percentage of skipped cells
+    std::cout << "Skipped " << N_skip << " cells out of " << surface.npoints << " cells." << std::endl;
+    std::cout << "Percentage of skipped cells: " 
+              << (N_skip / surface.npoints) * 100 << "%" << std::endl;
+    save_particles(filename);
+}
 
 
 
@@ -504,34 +576,13 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
     std::string coordinate_system = settings.get_string("coordinate_system");
     sampled_particles.resize(Nsamples);
 
-    int netB = 0;
-    int netS = 0;
-    int netQ = 0;
+    int netB = -4;
+    int netS = 6;
+    int netQ = 13;
 
-    if (surface.npoints <= 0) {
-        throw std::runtime_error("[conserved_charge_sampling] surface.npoints is zero or negative. Did you forget to call surface.read_data()?");
-    }
+    if (surface.npoints <= 0) throw std::runtime_error("surface.npoints is zero or negative");
 
-    std::cout << "[conserved_charge_sampling] surface.npoints = " << surface.npoints << std::endl;
 
-    auto check_surface_size = [&](const std::vector<double>& vec, const std::string& name) {
-        if (vec.size() != static_cast<size_t>(surface.npoints)) {
-            throw std::runtime_error("[conserved_charge_sampling] Mismatch in size for surface vector: " + name);
-        }
-    };
-
-    check_surface_size(surface.T, "T");
-    check_surface_size(surface.muB, "muB");
-    check_surface_size(surface.muS, "muS");
-    check_surface_size(surface.muQ, "muQ");
-    check_surface_size(surface.ut, "ut");
-    check_surface_size(surface.ux, "ux");
-    check_surface_size(surface.uy, "uy");
-    check_surface_size(surface.ueta, "ueta");
-    check_surface_size(surface.dsigma_t, "dsigma_t");
-    check_surface_size(surface.dsigma_x, "dsigma_x");
-    check_surface_size(surface.dsigma_y, "dsigma_y");
-    check_surface_size(surface.dsigma_eta, "dsigma_eta");
 
     // --- Initialize BSQ groups ---
     ParticleSystem baryons, antibaryons, strange_mesons_sminus, strange_mesons_splus;
@@ -552,7 +603,7 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
         else if (B == 0 && S == 0 && Q == 0 && pid != 22) particle_system.copy_particle(i, neutral_mesons);
     }
 
-    std::cout << "[conserved_charge_sampling] Particle groups created. Calculating yields..." << std::endl;
+    std::cout << " Calculating surface cell integrals ..." << std::endl;
 
     surface.N_baryons_cell.resize(surface.npoints, 0.0);
     surface.N_antibaryons_cell.resize(surface.npoints, 0.0);
@@ -567,15 +618,15 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
         double muB = surface.muB[icell];
         double muS = surface.muS[icell];
         double muQ = surface.muQ[icell];
-
+        if (icell % (surface.npoints / 20) == 0) {
+            std::cout << "Integration rogress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "% completed" << std::endl;
+        }
         double udsigma = surface.ut[icell] * surface.dsigma_t[icell]
                        + surface.ux[icell] * surface.dsigma_x[icell]
                        + surface.uy[icell] * surface.dsigma_y[icell]
                        + surface.ueta[icell] * surface.dsigma_eta[icell];
 
         if (udsigma <= 0.0) continue;
-        if (icell % (surface.npoints / 20) == 0)
-            std::cout << "[conserved_charge_sampling] Progress: " << (100 * icell / surface.npoints) << "% done." << std::endl;
 
         surface.N_baryons_cell[icell]               = baryons.calculate_particle_number(T, muB, muQ, muS, integrator);
         surface.N_antibaryons_cell[icell]           = antibaryons.calculate_particle_number(T, muB, muQ, muS, integrator);
@@ -586,11 +637,15 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
         surface.N_neutral_mesons_cell[icell]        = neutral_mesons.calculate_particle_number(T, muB, muQ, muS, integrator);
     }
 
-    std::cout << "[conserved_charge_sampling] Integration done. Starting sampling loop..." << std::endl;
-
+    std::cout << "Finished calculating surface cell integrals." << std::endl;
+    std::cout << "Sampling events with Nsamples = " << Nsamples << std::endl;
     for (int isample = 0; isample < Nsamples; ++isample) {
         std::vector<Particle> event;
-        std::cout << "Sampling event " << isample + 1 << "/" << Nsamples << std::endl;
+        //print percentage of samples sampled 
+        int progress_step = std::max(1, Nsamples / 20);
+        if (isample % progress_step == 0) {
+            std::cout << "Sampling progress: " << (static_cast<double>(isample) / Nsamples) * 100 << "% completed" << std::endl;
+        }
 
         // === Step 1: Baryons ===
         std::vector<Particle> baryon_sample;
@@ -667,7 +722,7 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
 
         sampled_particles[isample] = std::move(event);
     }
-
+    std::cout << "Finished sampling events." << std::endl;
     std::string filename = settings.get_string("output_file");
     std::cout << "Saving sampled particles to " << filename << std::endl;
     save_particles(filename);

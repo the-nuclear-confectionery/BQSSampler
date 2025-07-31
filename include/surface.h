@@ -50,6 +50,15 @@ public:
     std::vector<double> bulk; // Bulk pressure
     std::vector<double> shv_tt, shv_tx, shv_ty, shv_teta, 
                         shv_xx, shv_xy, shv_xeta, shv_yy, shv_yeta, shv_etaeta; // Shear stress tensor components
+
+    //densities
+    std::vector<double> rhoB, rhoS, rhoQ; // Densities of baryon, strangeness, and charge
+    // diffusion components
+    std::vector<double> diff_B0, diff_Bx, diff_By, diff_Beta;
+    std::vector<double> diff_S0, diff_Sx, diff_Sy, diff_Seta;
+    std::vector<double> diff_Q0, diff_Qx, diff_Qy, diff_Qeta;
+
+    // Aux quantities
     std::vector<double> N_baryons_cell;
     std::vector<double> N_antibaryons_cell;
     std::vector<double> N_strange_mesons_sminus_cell;
@@ -57,6 +66,7 @@ public:
     std::vector<double> N_charged_mesons_qplus_cell;
     std::vector<double> N_charged_mesons_qminus_cell;
     std::vector<double> N_neutral_mesons_cell;
+    std::vector<double> N_all_particles_cell;
 
 
 

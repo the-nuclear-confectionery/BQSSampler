@@ -17,11 +17,19 @@ Surface::Surface(const std::string& path , const Settings& settings)
 void Surface::read_data()
 {
     int D = settings.get_int("dimension");
+    std::string mode = settings.get_string("mode");
+    if (mode == "ccakev1" && D==3){
+        throw std::runtime_error("ccakev1 mode is not supported in 3D");
+    }
+
     std::string coordinate_system = settings.get_string("coordinate_system");
     if (D == 2) std::cout << "Reading surface data in 2D..." << std::endl;
     else if (D == 3) std::cout << "Reading surface data in 3D..." << std::endl;
     else throw std::runtime_error("D must be either 2 or 3.");
 
+
+
+    
     //check coordinate system
     if (coordinate_system == "cartesian") std::cout << "Using cartesian coordinates..." << std::endl;
     else if (coordinate_system == "hyperbolic") std::cout << "Using hyperbolic coordinates..." << std::endl;
@@ -50,6 +58,8 @@ void Surface::read_data()
         throw std::runtime_error("Could not open surface file.");
     }
 
+
+
     double aux_tau, aux_x, aux_y, aux_eta;
     double aux_ut, aux_ux, aux_uy, aux_ueta;
     double aux_dsigma_t, aux_dsigma_x, aux_dsigma_y, aux_dsigma_eta;
@@ -70,23 +80,32 @@ void Surface::read_data()
         surface_file >> aux_dsigma_t;
         surface_file >> aux_dsigma_x;
         surface_file >> aux_dsigma_y;
-        surface_file >> aux_dsigma_eta;
-        //std::cout << "dsigma_t: " << aux_dsigma_t << " dsigma_x: " << aux_dsigma_x << " dsigma_y: " << aux_dsigma_y << " dsigma_eta: " << aux_dsigma_eta << std::endl;
+
+        if ( D == 2) {
+            aux_dsigma_eta = 0.0;
+        } else {
+            surface_file >> aux_dsigma_eta;  // dsigma_eta
+        }
+        // covariant dsigma components
+
+
         // Read u and calculate gamma, ux, uy, un
         surface_file >> aux_ut;  // ut
         double gamma = aux_ut;
         surface_file >> aux_ux;  // ux
         surface_file >> aux_uy;  // uy
-        surface_file >> aux_ueta;  // ueta
-        //std::cout << "ut: " << aux_ut << " ux: " << aux_ux << " uy: " << aux_uy << " ueta: " << aux_ueta << std::endl;
+        if ( D == 2) {
+            aux_ueta = 0.0;  // ueta
+        } else {
+            surface_file >> aux_ueta;  // ueta
+        }
+        //contravariant four-velocity components
 
         // Normalize normal vector components
         double m_over_sigma;
         surface_file >> m_over_sigma; // m/sigma from SPH
         double u_dot_n = (gamma * aux_dsigma_t + aux_ux *aux_dsigma_x + aux_uy * aux_dsigma_y + aux_ueta * aux_dsigma_eta) ;
-        //std::cout << "u_dot_n: " << u_dot_n << std::endl;
-       // std::cout << "m_over_sigma: " << m_over_sigma << std::endl;
-       
+
         aux_dsigma_t = aux_dsigma_t* m_over_sigma / u_dot_n;
         aux_dsigma_x = aux_dsigma_x* m_over_sigma / u_dot_n;
         aux_dsigma_y = aux_dsigma_y* m_over_sigma / u_dot_n;
@@ -95,7 +114,7 @@ void Surface::read_data()
 
         surface_file >> aux_bulk;
 
-        // Read stress tensor components and apply conversion
+        // Read contravariant stress tensor components and apply conversion
         surface_file >> aux_shv_tt; // shv_tt
         aux_shv_tt *= HBARC;
         surface_file >> aux_shv_xx;  // shv_xx
@@ -107,28 +126,50 @@ void Surface::read_data()
         surface_file >> aux_shv_xy;  // shv_xy
         aux_shv_xy *= HBARC;
 
-        double dummy;
-        surface_file >> dummy;  // shv_xeta
-        surface_file >> dummy;  // shv_yeta
+        if(mode == "ccakev1") {
+            aux_shv_xeta = 0.0;  // shv_xeta
+            aux_shv_yeta = 0.0;  // shv_yeta
+        } else {
+            surface_file >> aux_shv_xeta;  // shv_xeta
+            surface_file >> aux_shv_yeta;  // shv_yeta
+        }
+        aux_shv_xeta *= HBARC;
+        aux_shv_yeta *= HBARC;
 
-        aux_shv_xeta = 0.0;  // shv_xeta
-        aux_shv_yeta = 0.0;  // shv_yeta
-        aux_shv_tx = (aux_ux * aux_shv_xx + aux_uy * aux_shv_xy) / gamma;  // shv_tx
-        aux_shv_ty = (aux_ux * aux_shv_xy + aux_uy * aux_shv_yy) / gamma;  // shv_ty
-        aux_shv_teta = 0.0;  // shv_teta
 
-        // Read spacetime position components
+
+        // Read contravariant spacetime position components
         surface_file >> aux_tau;  // tau
         surface_file >> aux_x;  // x
         surface_file >> aux_y;  // y
-        surface_file >> aux_eta;  // eta
 
-        double eta_ = 0.5 * log((aux_tau + aux_eta) / (aux_tau - aux_eta));
-        if(aux_eta*aux_eta < aux_tau*aux_tau){
-            if (eta_ < 0.5 && eta_ > -0.5){
-                etacount++;
-            }
+        if (D == 2) {
+            aux_eta = 0.0;  // eta
+        } else {
+            surface_file >> aux_eta;  // eta
         }
+
+
+        // Determine g33 based on coordinate system
+        double g33;
+        if (coordinate_system == "hyperbolic") {
+            g33 = -aux_tau * aux_tau;  // g_ηη = -τ²
+        } else {
+            g33 = -1.0;                // g_zz = -1
+        }
+
+
+        // Lower the index of the four-velocity: u_mu = g_mu_nu * u^nu
+        double ut_cov = aux_ut;           // g_ττ = 1 or g_tt = 1
+        double ux_cov = -aux_ux;          // g_xx = -1
+        double uy_cov = -aux_uy;          // g_yy = -1
+        double un_cov = g33 * aux_ueta;     // g_ηη = -τ² or g_zz = -1
+
+        // Compute temporal-spatial shear stress components π^{τi}
+        aux_shv_tx = -(ux_cov * aux_shv_xx + uy_cov * aux_shv_xy + un_cov * aux_shv_xeta) / aux_ut;
+        aux_shv_ty = -(ux_cov * aux_shv_xy + uy_cov * aux_shv_yy + un_cov * aux_shv_yeta) / aux_ut;
+        aux_shv_teta = -(ux_cov * aux_shv_xeta + uy_cov * aux_shv_yeta + un_cov * aux_shv_etaeta) / aux_ut;
+
 
         // Read thermodynamic quantities
         surface_file >> aux_s; // s
@@ -149,6 +190,10 @@ void Surface::read_data()
 
         
         std::string eos_name;
+        if (mode == "ccakev1") {
+            surface_file >> eos_name;  // eos_name
+        };
+
         //surface_file >> eos_name;
 
 
@@ -158,7 +203,40 @@ void Surface::read_data()
         double cs2;
         surface_file >> cs2;
 
-            
+        //for future
+        double aux_nB = 0.0;
+        double aux_nS = 0.0;
+        double aux_nQ = 0.0;
+        //surface_file >> aux_nB;  // nB
+        //surface_file >> aux_nS;  // nS
+        //surface_file >> aux_nQ;  // nQ
+
+        //diffusion components 
+        double aux_diff_Bx = 0.0;
+        double aux_diff_By = 0.0;
+        double aux_diff_Beta = 0.0;
+        double aux_diff_Sx = 0.0;
+        double aux_diff_Sy = 0.0;
+        double aux_diff_Seta = 0.0;
+        double aux_diff_Qx = 0.0;
+        double aux_diff_Qy = 0.0;
+        double aux_diff_Qeta = 0.0;
+        //calculate q0 components
+        double aux_diff_B0 = -(aux_diff_Bx * ux_cov + aux_diff_By * uy_cov + aux_diff_Beta * un_cov) / aux_ut;
+        double aux_diff_S0 = -(aux_diff_Sx * ux_cov + aux_diff_Sy * uy_cov + aux_diff_Seta * un_cov) / aux_ut;
+        double aux_diff_Q0 = -(aux_diff_Qx * ux_cov + aux_diff_Qy * uy_cov + aux_diff_Qeta * un_cov) / aux_ut;
+
+        // surface_file >> aux_diff_Bx;
+        // surface_file >> aux_diff_By;
+        // surface_file >> aux_diff_Beta;
+        // surface_file >> aux_diff_Sx;
+        // surface_file >> aux_diff_Sy;
+        // surface_file >> aux_diff_Seta;
+        // surface_file >> aux_diff_Qx;
+        // surface_file >> aux_diff_Qy;
+        // surface_file >> aux_diff_Qeta;
+
+
 
         // Calculate averages and total surface volume
 
@@ -189,9 +267,25 @@ void Surface::read_data()
         E.push_back(aux_E);
         T.push_back(aux_T);
         P.push_back(aux_P);
-        muB.push_back(0);
-        muS.push_back(0);
-        muQ.push_back(0);
+
+        if (settings.get_bool("use_mub")) {
+            muB.push_back(aux_muB);
+        } else {
+            muB.push_back(0.0);
+        }
+        if (settings.get_bool("use_mus")) {
+            muS.push_back(aux_muS);
+        } else {
+            muS.push_back(0.0);
+        }
+        if (settings.get_bool("use_muq")) {
+            muQ.push_back(aux_muQ);
+        } else {
+            muQ.push_back(0.0);
+        }
+        rhoB.push_back(aux_nB);
+        rhoS.push_back(aux_nS);
+        rhoQ.push_back(aux_nQ);
         u_dot_dsigma.push_back(aux_u_dot_dsigma);
         bulk.push_back(aux_bulk);
         shv_tt.push_back(aux_shv_tt);
@@ -204,6 +298,20 @@ void Surface::read_data()
         shv_yy.push_back(aux_shv_yy);
         shv_yeta.push_back(aux_shv_yeta);
         shv_etaeta.push_back(aux_shv_etaeta);
+        diff_B0.push_back(aux_diff_B0);
+        diff_Bx.push_back(aux_diff_Bx);
+        diff_By.push_back(aux_diff_By);
+        diff_Beta.push_back(aux_diff_Beta);
+        diff_S0.push_back(aux_diff_S0);
+        diff_Sx.push_back(aux_diff_Sx);
+        diff_Sy.push_back(aux_diff_Sy);
+        diff_Seta.push_back(aux_diff_Seta);
+        diff_Q0.push_back(aux_diff_Q0);
+        diff_Qx.push_back(aux_diff_Qx);
+        diff_Qy.push_back(aux_diff_Qy);
+        diff_Qeta.push_back(aux_diff_Qeta);
+
+        //aux quantities
         N_baryons_cell.push_back(0.0);
         N_antibaryons_cell.push_back(0.0);
         N_strange_mesons_sminus_cell.push_back(0.0);
@@ -211,17 +319,8 @@ void Surface::read_data()
         N_charged_mesons_qplus_cell.push_back(0.0);
         N_charged_mesons_qminus_cell.push_back(0.0);
         N_neutral_mesons_cell.push_back(0.0);
-        //print all data
-        //std::cout << "tau: " << aux_tau << " x: " << aux_x << " y: " << aux_y << " eta: " << aux_eta << std::endl;
-        //std::cout << "ut: " << aux_ut << " ux: " << aux_ux << " uy: " << aux_uy << " ueta: " << aux_ueta << std::endl;
-        //std::cout << "dsigma_t: " << aux_dsigma_t << " dsigma_x: " << aux_dsigma_x << " dsigma_y: " << aux_dsigma_y << " dsigma_eta: " << aux_dsigma_eta << std::endl;
-        //std::cout << "E: " << aux_E << " T: " << aux_T << " P: " << aux_P << " s: " << aux_s << std::endl;
-        //std::cout << "muB: " << aux_muB << " muS: " << aux_muS << " muQ: " << aux_muQ << std::endl;
-        //std::cout << "bulk: " << aux_bulk << std::endl;
-        //std::cout << "shv_tt: " << aux_shv_tt << " shv_tx: " << aux_shv_tx << " shv_ty: " << aux_shv_ty << " shv_teta: " << aux_shv_teta << std::endl;
-        //std::cout << "shv_xx: " << aux_shv_xx << " shv_xy: " << aux_shv_xy << " shv_xeta: " << aux_shv_xeta << std::endl;
-        //std::cout << "shv_yy: " << aux_shv_yy << " shv_yeta: " << aux_shv_yeta << " shv_etaeta: " << aux_shv_etaeta << std::endl;
-        //std::cout << "u_dot_dsigma: " << aux_u_dot_dsigma << std::endl;
+        N_all_particles_cell.push_back(0.0);
+
         
 
     }
