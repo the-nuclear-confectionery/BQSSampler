@@ -500,17 +500,23 @@ void Sampler::save_particles(const std::string& filename) const {
 }
 
 
-void Sampler::calculate_integrated_ntot(ParticleSystem& particle_system, Surface& surface, const NumericalIntegrator& integrator) {
+void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface& surface, const NumericalIntegrator& integrator) {
     std::string coordinate_system = settings.get_string("coordinate_system");
+    sampled_particles.resize(Nsamples);
+
+    int netB = 0;
+    int netS = 0;
+    int netQ = 0;
 
     if (surface.npoints <= 0) {
-        throw std::runtime_error("[calculate_integrated_ntot] surface.npoints is zero or negative. Did you forget to call surface.read_data()?");
+        throw std::runtime_error("[conserved_charge_sampling] surface.npoints is zero or negative. Did you forget to call surface.read_data()?");
     }
-    std::cout << "[calculate_integrated_ntot] surface.npoints = " << surface.npoints << std::endl;
-    // Validate surface vectors
+
+    std::cout << "[conserved_charge_sampling] surface.npoints = " << surface.npoints << std::endl;
+
     auto check_surface_size = [&](const std::vector<double>& vec, const std::string& name) {
         if (vec.size() != static_cast<size_t>(surface.npoints)) {
-            throw std::runtime_error("[calculate_integrated_ntot] Mismatch in size for surface vector: " + name);
+            throw std::runtime_error("[conserved_charge_sampling] Mismatch in size for surface vector: " + name);
         }
     };
 
@@ -526,21 +532,17 @@ void Sampler::calculate_integrated_ntot(ParticleSystem& particle_system, Surface
     check_surface_size(surface.dsigma_x, "dsigma_x");
     check_surface_size(surface.dsigma_y, "dsigma_y");
     check_surface_size(surface.dsigma_eta, "dsigma_eta");
-    std::cout << "[calculate_integrated_ntot] All surface vectors validated." << std::endl;
-    // Match exact 7-way BSQ group split
-    ParticleSystem baryons;
-    ParticleSystem antibaryons;
-    ParticleSystem strange_mesons_sminus;   // B=0, S=-1
-    ParticleSystem strange_mesons_splus;    // B=0, S=+1
-    ParticleSystem charged_mesons_qplus;    // B=0, S=0, Q=+1
-    ParticleSystem charged_mesons_qminus;   // B=0, S=0, Q=-1
-    ParticleSystem neutral_mesons;          // B=0, S=0, Q=0
-    std::cout << "[calculate_integrated_ntot] Initializing particle species groups." << std::endl;
+
+    // --- Initialize BSQ groups ---
+    ParticleSystem baryons, antibaryons, strange_mesons_sminus, strange_mesons_splus;
+    ParticleSystem charged_mesons_qplus, charged_mesons_qminus, neutral_mesons;
+
     for (int i = 0; i < particle_system.nparticles; ++i) {
         double B = particle_system.baryon[i];
         double S = particle_system.strange[i];
         double Q = particle_system.charge[i];
         int pid = particle_system.pid[i];
+
         if (B == 1) particle_system.copy_particle(i, baryons);
         else if (B == -1) particle_system.copy_particle(i, antibaryons);
         else if (B == 0 && S == -1) particle_system.copy_particle(i, strange_mesons_sminus);
@@ -548,12 +550,9 @@ void Sampler::calculate_integrated_ntot(ParticleSystem& particle_system, Surface
         else if (B == 0 && S == 0 && Q == +1) particle_system.copy_particle(i, charged_mesons_qplus);
         else if (B == 0 && S == 0 && Q == -1) particle_system.copy_particle(i, charged_mesons_qminus);
         else if (B == 0 && S == 0 && Q == 0 && pid != 22) particle_system.copy_particle(i, neutral_mesons);
-
     }
-    std::cout << "[calculate_integrated_ntot] Particle species groups initialized." << std::endl;
-    // Resize cell yield vectors (with warning if resizing to 0)
-    if (surface.npoints == 0)
-        std::cerr << "[Warning] Resizing particle yield vectors to 0 elements." << std::endl;
+
+    std::cout << "[conserved_charge_sampling] Particle groups created. Calculating yields..." << std::endl;
 
     surface.N_baryons_cell.resize(surface.npoints, 0.0);
     surface.N_antibaryons_cell.resize(surface.npoints, 0.0);
@@ -562,25 +561,7 @@ void Sampler::calculate_integrated_ntot(ParticleSystem& particle_system, Surface
     surface.N_charged_mesons_qplus_cell.resize(surface.npoints, 0.0);
     surface.N_charged_mesons_qminus_cell.resize(surface.npoints, 0.0);
     surface.N_neutral_mesons_cell.resize(surface.npoints, 0.0);
-    std::cout << "[calculate_integrated_ntot] Resized cell yield vectors." << std::endl;
-    // Warn if any group is empty (optional)
-    if (baryons.particle_species_number.empty())
-        std::cerr << "[Warning] Baryons group is empty!\n";
-    if (antibaryons.particle_species_number.empty())
-        std::cerr << "[Warning] Antibaryons group is empty!\n";
-    if (strange_mesons_sminus.particle_species_number.empty())
-        std::cerr << "[Warning] Strange mesons (S=-1) group is empty!\n";
-    if (strange_mesons_splus.particle_species_number.empty())
-        std::cerr << "[Warning] Strange mesons (S=+1) group is empty!\n";
-    if (charged_mesons_qplus.particle_species_number.empty())
-        std::cerr << "[Warning] Charged mesons (Q=+1) group is empty!\n";
-    if (charged_mesons_qminus.particle_species_number.empty())
-        std::cerr << "[Warning] Charged mesons (Q=-1) group is empty!\n";
-    if (neutral_mesons.particle_species_number.empty())
-        std::cerr << "[Warning] Neutral mesons (Q=0) group is empty!\n";
 
-    // Loop over cells and compute expected yields
-    std::cout << "[calculate_integrated_ntot] Calculating integrated particle yields for each cell." << std::endl;
     for (int icell = 0; icell < surface.npoints; ++icell) {
         double T = surface.T[icell];
         double muB = surface.muB[icell];
@@ -593,112 +574,77 @@ void Sampler::calculate_integrated_ntot(ParticleSystem& particle_system, Surface
                        + surface.ueta[icell] * surface.dsigma_eta[icell];
 
         if (udsigma <= 0.0) continue;
-        //Show percentage of cells done each 5%
-        if (icell % (surface.npoints / 20) == 0) {
-            std::cout << "[calculate_integrated_ntot] Progress: " << (icell / (surface.npoints / 100)) << "% done." << std::endl;
-        }
-        surface.N_baryons_cell[icell] = baryons.calculate_particle_number(T, muB, muS, muQ, integrator);
-        surface.N_antibaryons_cell[icell] = antibaryons.calculate_particle_number(T, muB, muS, muQ, integrator);
-        surface.N_strange_mesons_sminus_cell[icell] = strange_mesons_sminus.calculate_particle_number(T, muB, muS, muQ, integrator);
-        surface.N_strange_mesons_splus_cell[icell] = strange_mesons_splus.calculate_particle_number(T, muB, muS, muQ, integrator);
-        surface.N_charged_mesons_qplus_cell[icell] = charged_mesons_qplus.calculate_particle_number(T, muB, muS, muQ, integrator);
-        surface.N_charged_mesons_qminus_cell[icell] = charged_mesons_qminus.calculate_particle_number(T, muB, muS, muQ, integrator);
-        surface.N_neutral_mesons_cell[icell] = neutral_mesons.calculate_particle_number(T, muB, muS, muQ, integrator);
+        if (icell % (surface.npoints / 20) == 0)
+            std::cout << "[conserved_charge_sampling] Progress: " << (100 * icell / surface.npoints) << "% done." << std::endl;
+
+        surface.N_baryons_cell[icell]               = baryons.calculate_particle_number(T, muB, muQ, muS, integrator);
+        surface.N_antibaryons_cell[icell]           = antibaryons.calculate_particle_number(T, muB, muQ, muS, integrator);
+        surface.N_strange_mesons_sminus_cell[icell] = strange_mesons_sminus.calculate_particle_number(T, muB, muQ, muS, integrator);
+        surface.N_strange_mesons_splus_cell[icell]  = strange_mesons_splus.calculate_particle_number(T, muB, muQ, muS, integrator);
+        surface.N_charged_mesons_qplus_cell[icell]  = charged_mesons_qplus.calculate_particle_number(T, muB, muQ, muS, integrator);
+        surface.N_charged_mesons_qminus_cell[icell] = charged_mesons_qminus.calculate_particle_number(T, muB, muQ, muS, integrator);
+        surface.N_neutral_mesons_cell[icell]        = neutral_mesons.calculate_particle_number(T, muB, muQ, muS, integrator);
     }
-    std::cout << "[calculate_integrated_ntot] Finished calculating integrated particle yields for all cells." << std::endl;
-}
 
-
-
-void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface& surface, const NumericalIntegrator& integrator) {
-    std::string coordinate_system = settings.get_string("coordinate_system");
-    sampled_particles.resize(Nsamples);
-
-    int netB = 0; // <-- hardcode total net baryon number to zero for now
-    int netS = 0; // <-- hardcode total net strangeness to zero for now
-    int netQ = 0; // <-- hardcode total net charge to zero for now
-
-    // --- Split all particles into fine BSQ groups ---
-    ParticleSystem baryons;
-    ParticleSystem antibaryons;
-    ParticleSystem strange_mesons_sminus;   // B=0, S=-1
-    ParticleSystem strange_mesons_splus;    // B=0, S=+1
-    ParticleSystem charged_mesons_qplus;    // B=0, S=0, Q=+1
-    ParticleSystem charged_mesons_qminus;   // B=0, S=0, Q=-1
-    ParticleSystem neutral_mesons;          // B=0, S=0, Q=0
-    std::cout << "Calculating integrated particle yields..." << std::endl;
-    calculate_integrated_ntot(particle_system, surface, integrator);
-    std::cout << "Finished calculating integrated particle yields." << std::endl;
-    for (int i = 0; i < particle_system.nparticles; ++i) {
-        double B = particle_system.baryon[i];
-        double S = particle_system.strange[i];
-        double Q = particle_system.charge[i];
-        int pid = particle_system.pid[i];
-        if (B == 1) particle_system.copy_particle(i, baryons);
-        else if (B == -1) particle_system.copy_particle(i, antibaryons);
-        else if (B == 0 && S == -1) particle_system.copy_particle(i, strange_mesons_sminus);
-        else if (B == 0 && S == +1) particle_system.copy_particle(i, strange_mesons_splus);
-        else if (B == 0 && S == 0 && Q == +1) particle_system.copy_particle(i, charged_mesons_qplus);
-        else if (B == 0 && S == 0 && Q == -1) particle_system.copy_particle(i, charged_mesons_qminus);
-        else if (B == 0 && S == 0 && Q == 0 && pid != 22) particle_system.copy_particle(i, neutral_mesons);
-    }
-    std::cout << "Finished splitting particles into BSQ groups." << std::endl;
+    std::cout << "[conserved_charge_sampling] Integration done. Starting sampling loop..." << std::endl;
 
     for (int isample = 0; isample < Nsamples; ++isample) {
         std::vector<Particle> event;
         std::cout << "Sampling event " << isample + 1 << "/" << Nsamples << std::endl;
-        // STEP 1: Sample baryons freely, ensure >= netB
+
+        // === Step 1: Baryons ===
         std::vector<Particle> baryon_sample;
-        int N_baryons = -1;
-        std::cout << "N_baryons = " << N_baryons << std::endl;
-        std::cout << "netB = " << netB << std::endl;
-        std::cout << "Result N_baryons < netB: " << (N_baryons < netB) << std::endl;
+        // set N_baryons to numeric limits, so we always sample baryons even if netB < 0
+        int N_baryons = -9999999;
         while (N_baryons < netB) {
             std::cout << "Sampling baryons..." << std::endl;
             baryon_sample = sample_fixed_yield_from_surface(baryons, surface, surface.N_baryons_cell, -1, coordinate_system);
-            std::cout << "Sampled " << baryon_sample.size() << " baryons." << std::endl;
             N_baryons = net_baryon(baryon_sample);
         }
         std::cout << "Sampled " << N_baryons << " baryons." << std::endl;
-        // STEP 2: Sample antibaryons to conserve net B
+
         int N_antibaryons = N_baryons - netB;
         std::vector<Particle> antibaryon_sample = sample_fixed_yield_from_surface(antibaryons, surface, surface.N_antibaryons_cell, N_antibaryons, coordinate_system);
         std::cout << "Sampled " << antibaryon_sample.size() << " antibaryons." << std::endl;
-        // STEP 3a: Sample S = -1 mesons
+
         std::vector<Particle> s_mesons = sample_fixed_yield_from_surface(strange_mesons_sminus, surface, surface.N_strange_mesons_sminus_cell, -1, coordinate_system);
         std::cout << "Sampled " << s_mesons.size() << " strange mesons (S = -1)." << std::endl;
 
-        // STEP 3b: Sample S = +1 mesons to conserve strangeness
         int NS_baryons = net_strangeness(baryon_sample) + net_strangeness(antibaryon_sample);
         int NS_strange = net_strangeness(s_mesons);
         int NS_needed = NS_baryons + NS_strange - netS;
+        //take the absolute value
+        NS_needed = std::abs(NS_needed);
+        //std::cout << "NS_needed = " << NS_needed << std::endl;
+        //std::cout << "NS_baryons = " << NS_baryons << ", NS_strange = " << NS_strange << std::endl;
+        //std::cout << "netS = " << netS << std::endl;
+        //std::cout << "Baryon strangeness: " << net_strangeness(baryon_sample) << std::endl;
+        //std::cout << "Antibaryon strangeness: " << net_strangeness(antibaryon_sample) << std::endl;
         std::vector<Particle> anti_strange_mesons = sample_fixed_yield_from_surface(strange_mesons_splus, surface, surface.N_strange_mesons_splus_cell, NS_needed, coordinate_system);
         std::cout << "Sampled " << anti_strange_mesons.size() << " strange mesons (S = +1)." << std::endl;
 
-        // STEP 4a: Sample Q = +1 mesons freely until enough positive charge
         std::vector<Particle> pos_mesons;
         int Q_baryons = net_charge(baryon_sample) + net_charge(antibaryon_sample);
         int Q_strange = net_charge(s_mesons) + net_charge(anti_strange_mesons);
         int Q_remain = netQ - Q_baryons - Q_strange;
-        int N_qplus = -1;
+        
+        //set to numeric limits, so we always sample electric charge even if Q_remain < 0
+        int N_qplus = -9999999;
         while (N_qplus < Q_remain) {
-            pos_mesons = sample_fixed_yield_from_surface(
-                charged_mesons_qplus, surface, surface.N_charged_mesons_qplus_cell, -1, coordinate_system);
+            pos_mesons = sample_fixed_yield_from_surface(charged_mesons_qplus, surface, surface.N_charged_mesons_qplus_cell, -1, coordinate_system);
             N_qplus = net_charge(pos_mesons);
         }
         std::cout << "Sampled " << pos_mesons.size() << " charged mesons (Q = +1)." << std::endl;
-        // STEP 4b: Sample Q = -1 mesons to exactly conserve net charge
+
         int Q_BQ = net_charge(baryon_sample) + net_charge(antibaryon_sample);
         int Q_SM = net_charge(s_mesons) + net_charge(anti_strange_mesons);
         int Q_pos = net_charge(pos_mesons);
         int N_neg = Q_BQ + Q_SM + Q_pos - netQ;
 
-        std::vector<Particle> neg_mesons = sample_fixed_yield_from_surface(
-            charged_mesons_qminus, surface, surface.N_charged_mesons_qminus_cell, N_neg, coordinate_system);
+        std::vector<Particle> neg_mesons = sample_fixed_yield_from_surface(charged_mesons_qminus, surface, surface.N_charged_mesons_qminus_cell, N_neg, coordinate_system);
         std::cout << "Sampled " << neg_mesons.size() << " charged mesons (Q = -1)." << std::endl;
-        // STEP 5: Sample neutral mesons directly (including φ(s s̄), π0)
-        std::vector<Particle> neutrals = sample_fixed_yield_from_surface(
-            neutral_mesons, surface, surface.N_neutral_mesons_cell, -1, coordinate_system);
+
+        std::vector<Particle> neutrals = sample_fixed_yield_from_surface(neutral_mesons, surface, surface.N_neutral_mesons_cell, -1, coordinate_system);
         std::cout << "Sampled " << neutrals.size() << " neutral mesons (Q = 0)." << std::endl;
 
         // Final event particle list
@@ -710,6 +656,15 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
         event.insert(event.end(), neg_mesons.begin(), neg_mesons.end());
         event.insert(event.end(), neutrals.begin(), neutrals.end());
 
+        // === New: Print totals ===
+        int B_total = net_baryon(event);
+        int S_total = net_strangeness(event);
+        int Q_total = net_charge(event);
+        std::cout << "[Event Totals] B = " << B_total << ", S = " << S_total << ", Q = " << Q_total << std::endl;
+
+        std::cout << "[Event Subgroup Info] Strangeness in B/B̄ = " << NS_baryons << std::endl;
+        std::cout << "[Event Subgroup Info] Charge in B/B̄ = " << Q_BQ << ", in S/S̄ = " << Q_SM << std::endl;
+
         sampled_particles[isample] = std::move(event);
     }
 
@@ -717,7 +672,6 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
     std::cout << "Saving sampled particles to " << filename << std::endl;
     save_particles(filename);
 }
-
 
 
 double Sampler::net_baryon(const std::vector<Particle>& plist) {
@@ -758,16 +712,23 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
     const std::string& coord)
 {
     std::vector<Particle> result;
+
     std::discrete_distribution<int> type_dist(group.particle_species_number.begin(), group.particle_species_number.end());
-    std::cout << "Sampling group type " << std::endl;
-    std::cout << "required = " << required << std::endl;
-    std::cout << "result.size() = " << result.size() << std::endl;
-    while (required < 0 || static_cast<int>(result.size()) < required) {
+    bool fixed_yield = (required >= 0);
+    int target_yield = fixed_yield ? required : 0;
+
+    int max_attempts = fixed_yield ? 1e4 : 1;  // repeat sampling in fixed-yield mode only
+    int attempt = 0;
+
+    while ((fixed_yield && static_cast<int>(result.size()) < target_yield && attempt < max_attempts) ||
+           (!fixed_yield && attempt < 1))
+    {
+        ++attempt;
+
         for (int icell = 0; icell < surface.npoints; ++icell) {
-            //print percentage at 5% intervals
-            if (icell % (surface.npoints / 20) == 0) {
-                std::cout << "[sample_fixed_yield_from_surface] Progress: " << (icell / (surface.npoints / 100)) << "% done." << std::endl;
-            }
+            if (fixed_yield && static_cast<int>(result.size()) >= target_yield)
+                break;
+
             double T = surface.T[icell];
             double muB = surface.muB[icell];
             double muS = surface.muS[icell];
@@ -782,6 +743,7 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
             if (udsigma <= 0.0) continue;
 
             double N_tot_cell = N_cell_vector[icell];
+
             LRF lrf(coord,
                     surface.ut[icell], surface.ux[icell], surface.uy[icell], surface.ueta[icell],
                     surface.dsigma_t[icell], surface.dsigma_x[icell],
@@ -792,16 +754,13 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
             N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
             if (N_tot_cell <= 0.0) continue;
 
-
             std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
-            std::cout << "Poisson sampling with mean N_tot_cell = " << N_tot_cell << std::endl;
-
-
-            
             int N_hadrons = poisson_hadrons(gen_poisson);
-            std::cout << "Sampling " << N_hadrons << " hadrons in cell " << icell << std::endl;
 
             for (int i = 0; i < N_hadrons; ++i) {
+                if (fixed_yield && static_cast<int>(result.size()) >= target_yield)
+                    break;
+
                 int sampled_index = type_dist(gen_type);
                 int pid = group.pid[sampled_index];
                 double mass = group.mass[sampled_index];
@@ -831,8 +790,7 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
 
                 double feq = 0.0;
                 double delta_f = 0.0;
-                ///\todo implement feq and delta_f properly
-                double weight_visc = 0.5; // default placeholder for (1 + delta_f/feq)/2
+                double weight_visc = 0.5;  // Placeholder
 
                 bool add_particle = std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_keep) < (flux * weight_visc);
                 if (!add_particle) continue;
@@ -889,14 +847,12 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
                 result.push_back(p);
             }
         }
-
-        if (required >= 0 && static_cast<int>(result.size()) >= required)
-            break;
     }
 
-    if (required >= 0 && static_cast<int>(result.size()) > required) {
+    // Trim if too many
+    if (fixed_yield && static_cast<int>(result.size()) > target_yield) {
         std::shuffle(result.begin(), result.end(), gen_trim);
-        result.resize(required);
+        result.resize(target_yield);
     }
 
     return result;
