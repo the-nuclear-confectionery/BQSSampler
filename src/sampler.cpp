@@ -19,9 +19,9 @@ Sampler::Sampler(const Settings& settings): settings(settings)
         std::chrono::system_clock::now().time_since_epoch().count() );
         std::cout << "Using random seed: " << sampler_seed << std::endl;
     }
-            
-    max_w_table.load_from_file("../tables/max_w_table.dat");
-    max_w_table_massive.load_from_file("../tables/max_w_table_massive.dat");
+    std::string tables_path = settings.get_string("tables_path");
+    max_w_table.load_from_file(tables_path + "/max_w_table.dat");
+    max_w_table_massive.load_from_file(tables_path + "/max_w_table_massive.dat");
     accepted = 0;
     tries = 0;
     nabove = 0;
