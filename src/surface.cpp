@@ -126,7 +126,7 @@ void Surface::read_data()
         surface_file >> aux_shv_xy;  // shv_xy
         aux_shv_xy *= HBARC;
 
-        if(mode == "ccakev1") {
+        if(D == 2) {
             aux_shv_xeta = 0.0;  // shv_xeta
             aux_shv_yeta = 0.0;  // shv_yeta
         } else {
