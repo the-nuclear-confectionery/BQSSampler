@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
         sampler.conserved_charge_sampling(particle_system, surface, integrator);
     } else {
         std::cout << "Using regular sampling method." << std::endl;
-        sampler.sample(particle_system, surface, integrator);
+        sampler.sample_unconstrained(particle_system, surface, integrator);
     }
 
 

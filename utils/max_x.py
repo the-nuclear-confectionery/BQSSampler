@@ -23,7 +23,7 @@ def find_all_mbar_chem(filepath, tol=1e-6):
     max_p = np.max(p_grid)
     
     mbar_chem_pairs = []
-    chem_values = np.linspace(-6, 6, 10000)
+    chem_values = np.linspace(-10, 10, 10000)
     if 0 not in chem_values:
         chem_values = np.append(chem_values, 0)
         chem_values = np.sort(chem_values)
@@ -293,5 +293,5 @@ if __name__ == "__main__":
         print("No valid (mbar, chem) pairs found.")
 
     # Save the filtered table where max_w > 1
-    # save_max_w_table(mbar_vals, chem_vals, max_w_values)
+    save_max_w_table(mbar_vals, chem_vals, max_w_values)
 

@@ -139,6 +139,7 @@ public:
         shv_yz_lrf = -zt * ( shv_tx * yx + shv_ty * yy )
                      -g33 * zeta * ( shv_xn * yx + shv_yn * yy );
 
+        //enforce null trace in the LRF
         shv_zz_lrf = - ( shv_xx_lrf + shv_yy_lrf );
     }
 

@@ -15,7 +15,7 @@
 #include "tools.h"
 #include "tables.h"
 #include "settings.h"
-
+#include "deltaf_corrections.h"
 
 class Sampler {
 public:

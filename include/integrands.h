@@ -17,6 +17,32 @@ struct ThermalParams {
     double sign;
 };
 
+struct DissipativeParams {
+    double shv_tt;
+    double shv_tx;
+    double shv_ty;
+    double shv_teta;
+    double shv_xx;
+    double shv_xy;
+    double shv_xeta;
+    double shv_yy;
+    double shv_yeta;
+    double shv_etaeta;
+    double bulk;
+    double q_B0;
+    double q_Bx;
+    double q_By;
+    double q_Beta;
+    double q_S0;
+    double q_Sx;
+    double q_Sy;
+    double q_Seta;
+    double q_Q0;
+    double q_Qx;
+    double q_Qy;
+    double q_Qeta;
+};
+
 
 
 inline constexpr double get_equilibrium_density(const double pLRF_bar, const ThermalParams& params) {

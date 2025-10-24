@@ -576,9 +576,9 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
     std::string coordinate_system = settings.get_string("coordinate_system");
     sampled_particles.resize(Nsamples);
 
-    int netB = -4;
-    int netS = 6;
-    int netQ = 13;
+    int netB = 0.;
+    int netS = 0.;
+    int netQ = 0.;
 
     if (surface.npoints <= 0) throw std::runtime_error("surface.npoints is zero or negative");
 
@@ -812,6 +812,31 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
             std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
             int N_hadrons = poisson_hadrons(gen_poisson);
 
+            DissipativeParams diss_params;
+            diss_params.shv_tt = surface.shv_tt[icell];
+            diss_params.shv_tx = surface.shv_tx[icell];
+            diss_params.shv_ty = surface.shv_ty[icell];
+            diss_params.shv_teta = surface.shv_teta[icell];
+            diss_params.shv_xx = surface.shv_xx[icell];
+            diss_params.shv_xy = surface.shv_xy[icell];
+            diss_params.shv_xeta = surface.shv_xeta[icell];
+            diss_params.shv_yy = surface.shv_yy[icell]; 
+            diss_params.shv_yeta = surface.shv_yeta[icell];
+            diss_params.shv_etaeta = surface.shv_etaeta[icell];
+            diss_params.bulk = surface.bulk[icell]; 
+            diss_params.q_B0 = surface.diff_B0[icell];
+            diss_params.q_Q0 = surface.diff_Q0[icell];
+            diss_params.q_S0 = surface.diff_S0[icell];
+            diss_params.q_Bx = surface.diff_Bx[icell];
+            diss_params.q_Qx = surface.diff_Qx[icell];
+            diss_params.q_Sx = surface.diff_Sx[icell];
+            diss_params.q_By = surface.diff_By[icell];
+            diss_params.q_Qy = surface.diff_Qy[icell];
+            diss_params.q_Sy = surface.diff_Sy[icell];
+            diss_params.q_Beta = surface.diff_Beta[icell];
+            diss_params.q_Qeta = surface.diff_Qeta[icell];
+            diss_params.q_Seta = surface.diff_Seta[icell];
+
             for (int i = 0; i < N_hadrons; ++i) {
                 if (fixed_yield && static_cast<int>(result.size()) >= target_yield)
                     break;
@@ -833,7 +858,9 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
                 sampled_params.strange = S;
                 sampled_params.charge = Q;
                 sampled_params.sign = group.theta[sampled_index];
-
+                
+                double E_cell = surface.E[icell];
+                double P_cell = surface.P[icell];
                 double sampled_pLRF[4] = {0.0};
                 sample_momentum(sampled_params, sampled_pLRF, gen_mom);
 
@@ -843,10 +870,14 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
                                              - lrf.dsigma_z_lrf * sampled_pLRF[3])
                               / (lrf.dsigma_magnitude * sampled_pLRF[0]);
 
-                double feq = 0.0;
-                double delta_f = 0.0;
-                double weight_visc = 0.5;  // Placeholder
-
+                double feq = group.spin_degeneracy[sampled_index]/(std::exp((sampled_pLRF[0]
+                                    - B * muB
+                                    - Q * muQ
+                                    - S * muS) / T) + group.theta[sampled_index]);
+                double delta_f = feq*(1.-group.theta[sampled_index]*feq/group.spin_degeneracy[sampled_index])
+                                    *df_corrections(settings ,lrf, tau_squared, sampled_pLRF, T, E_cell, P_cell, diss_params);
+                            
+                double weight_visc = 0.5*(1. + delta_f/feq);
                 bool add_particle = std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_keep) < (flux * weight_visc);
                 if (!add_particle) continue;
 

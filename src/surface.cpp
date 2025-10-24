@@ -202,7 +202,18 @@ void Surface::read_data()
         aux_P = enthalpy * HBARC - aux_E ;
         double cs2;
         surface_file >> cs2;
-
+        //print all the data read
+        //std::cout << "Read surface point " << i+1 << "/" << npoints << ": "
+        //          << "tau=" << aux_tau << ", x=" << aux_x << ", y=" << aux_y << ", eta=" << aux_eta
+        //          << ", ut=" << aux_ut << ", ux=" << aux_ux << ", uy=" << aux_uy << ", ueta=" << aux_ueta
+        //          << ", dsigma_t=" << aux_dsigma_t << ", dsigma_x=" << aux_dsigma_x << ", dsigma_y=" << aux_dsigma_y << ", dsigma_eta=" << aux_dsigma_eta
+        //          << ", E=" << aux_E << ", T=" << aux_T << ", P=" << aux_P
+        //          << ", muB=" << aux_muB << ", muS=" << aux_muS << ", muQ=" << aux_muQ
+        //          << ", bulkPi=" << aux_bulk
+        //          << ", shv_tt=" << aux_shv_tt << ", shv_tx=" << aux_shv_tx << ", shv_ty=" << aux_shv_ty << ", shv_teta=" << aux_shv_teta
+        //          << ", shv_xx=" << aux_shv_xx << ", shv_xy=" << aux_shv_xy << ", shv_xeta=" << aux_shv_xeta
+        //          << ", shv_yy=" <<  aux_shv_yy<< ", shv_yeta=" << aux_shv_yeta<< ", shv_etaeta=" << aux_shv_etaeta
+        //          << std::endl;
         //for future
         double aux_nB = 0.0;
         double aux_nS = 0.0;
