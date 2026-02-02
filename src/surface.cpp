@@ -47,7 +47,7 @@ void Surface::read_data()
     npoints = 0;
     std::string line;
     bool header_read = false;
-    double Btmp, Stmp, Qtmp;
+    double Btmp = 0.0, Stmp = 0.0, Qtmp = 0.0;
     while (std::getline(surface_file, line)) {
         if (line.empty()) continue;
         if (line[0] == '#') {
@@ -249,10 +249,11 @@ void Surface::read_data()
         double aux_nB = 0.0;
         double aux_nS = 0.0;
         double aux_nQ = 0.0;
+        if (mode != "ccakev1") {
         surface_file >> aux_nB;  // nB
         surface_file >> aux_nS;  // nS
         surface_file >> aux_nQ;  // nQ
-
+        }
         //diffusion components 
         double aux_diff_Bx = 0.0;
         double aux_diff_By = 0.0;
@@ -265,6 +266,7 @@ void Surface::read_data()
         double aux_diff_Qeta = 0.0;
 
         double dummy_diff_0; //will be discarded
+        if (mode != "ccakev1") {
         surface_file >> dummy_diff_0; //diff_B0
         surface_file >> aux_diff_Bx;
         surface_file >> aux_diff_By;
@@ -279,6 +281,7 @@ void Surface::read_data()
         surface_file >> aux_diff_Qx;
         surface_file >> aux_diff_Qy;
         surface_file >> aux_diff_Qeta;
+        }
         //calculate q0 components
         double aux_diff_B0 = -(aux_diff_Bx * ux_cov + aux_diff_By * uy_cov + aux_diff_Beta * un_cov) / aux_ut;
         double aux_diff_S0 = -(aux_diff_Sx * ux_cov + aux_diff_Sy * uy_cov + aux_diff_Seta * un_cov) / aux_ut;
