@@ -36,28 +36,58 @@ void Surface::read_data()
     else throw std::runtime_error("Coordinate system must be either cartesian or hyperbolic.");
 
     // Open the file to count lines
-    // Prepare the file path using stringstream
     std::ostringstream surfdat_stream;
     surfdat_stream << path;
-    std::ifstream surface_file(surfdat_stream.str().c_str());  // Open the file
-
+    std::ifstream surface_file(surfdat_stream.str().c_str());
     if (!surface_file.is_open()) {
         throw std::runtime_error("Could not open surface file.");
     }
 
-    // Count the number of surface points (lines)
+    // Count number of surface points (ignore header/comments)
+    npoints = 0;
     std::string line;
+    bool header_read = false;
+    double Btmp, Stmp, Qtmp;
     while (std::getline(surface_file, line)) {
-        npoints++;  // Increment line counter for each valid line in the file
+        if (line.empty()) continue;
+        if (line[0] == '#') {
+            // Try to parse first header "# B S Q"
+            if (!header_read) {
+                std::istringstream hs(line.substr(1));
+                if (hs >> Btmp >> Stmp >> Qtmp) {
+                    // Store if you have members for totals (optional):
+                    // this->Btot = Btmp; this->Stot = Stmp; this->Qtot = Qtmp;
+                    header_read = true;
+                }
+            }
+            continue; // do not count comment lines
+        }
+        npoints++;
     }
-    surface_file.close();  // Close the file after counting lines
-    //npoints = 2;
+    surface_file.close();
+ 
+    //store the total charges
+    Btotal = Btmp;
+    Stotal = Stmp;
+    Qtotal = Qtmp;
     // Reopen the file to read data
     surface_file.open(surfdat_stream.str().c_str());
     if (!surface_file.is_open()) {
         throw std::runtime_error("Could not open surface file.");
     }
 
+    // Skip comment/header lines at the top (including "# B S Q")
+    std::streampos data_start_pos;
+    while (true) {
+        data_start_pos = surface_file.tellg();
+        if (!std::getline(surface_file, line)) break;
+        if (line.empty()) continue;
+        if (line[0] == '#') continue;
+        // first data line found: rewind to its beginning
+        surface_file.clear();
+        surface_file.seekg(data_start_pos);
+        break;
+    }
 
 
     double aux_tau, aux_x, aux_y, aux_eta;
@@ -113,6 +143,7 @@ void Surface::read_data()
 
 
         surface_file >> aux_bulk;
+        aux_bulk *= HBARC;
 
         // Read contravariant stress tensor components and apply conversion
         surface_file >> aux_shv_tt; // shv_tt
@@ -218,9 +249,9 @@ void Surface::read_data()
         double aux_nB = 0.0;
         double aux_nS = 0.0;
         double aux_nQ = 0.0;
-        //surface_file >> aux_nB;  // nB
-        //surface_file >> aux_nS;  // nS
-        //surface_file >> aux_nQ;  // nQ
+        surface_file >> aux_nB;  // nB
+        surface_file >> aux_nS;  // nS
+        surface_file >> aux_nQ;  // nQ
 
         //diffusion components 
         double aux_diff_Bx = 0.0;
@@ -232,20 +263,27 @@ void Surface::read_data()
         double aux_diff_Qx = 0.0;
         double aux_diff_Qy = 0.0;
         double aux_diff_Qeta = 0.0;
+
+        double dummy_diff_0; //will be discarded
+        surface_file >> dummy_diff_0; //diff_B0
+        surface_file >> aux_diff_Bx;
+        surface_file >> aux_diff_By;
+        surface_file >> aux_diff_Beta;
+            
+        surface_file >> dummy_diff_0; //diff_S0
+        surface_file >> aux_diff_Sx;
+        surface_file >> aux_diff_Sy;
+        surface_file >> aux_diff_Seta;
+        
+        surface_file >> dummy_diff_0; //diff_Q0
+        surface_file >> aux_diff_Qx;
+        surface_file >> aux_diff_Qy;
+        surface_file >> aux_diff_Qeta;
         //calculate q0 components
         double aux_diff_B0 = -(aux_diff_Bx * ux_cov + aux_diff_By * uy_cov + aux_diff_Beta * un_cov) / aux_ut;
         double aux_diff_S0 = -(aux_diff_Sx * ux_cov + aux_diff_Sy * uy_cov + aux_diff_Seta * un_cov) / aux_ut;
         double aux_diff_Q0 = -(aux_diff_Qx * ux_cov + aux_diff_Qy * uy_cov + aux_diff_Qeta * un_cov) / aux_ut;
 
-        // surface_file >> aux_diff_Bx;
-        // surface_file >> aux_diff_By;
-        // surface_file >> aux_diff_Beta;
-        // surface_file >> aux_diff_Sx;
-        // surface_file >> aux_diff_Sy;
-        // surface_file >> aux_diff_Seta;
-        // surface_file >> aux_diff_Qx;
-        // surface_file >> aux_diff_Qy;
-        // surface_file >> aux_diff_Qeta;
 
 
 
