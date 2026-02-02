@@ -70,4 +70,27 @@ a_1 = 1
 roots_laguerre_1, weights_laguerre_1 = gauss_laguerre(a_1, n)
 save_to_dat("gauss_laguerre_a1.dat", roots_laguerre_1, weights_laguerre_1)
 
+
+
+a_2 = 2
+roots_laguerre_2, weights_laguerre_2 = gauss_laguerre(a_2, n)
+save_to_dat("gauss_laguerre_a2.dat", roots_laguerre_2, weights_laguerre_2)
+
+a_3 = 3
+roots_laguerre_3, weights_laguerre_3 = gauss_laguerre(a_3, n)
+save_to_dat("gauss_laguerre_a3.dat", roots_laguerre_3, weights_laguerre_3)
+
+a_4 = 4
+roots_laguerre_4, weights_laguerre_4 = gauss_laguerre(a_4, n)
+save_to_dat("gauss_laguerre_a4.dat", roots_laguerre_4, weights_laguerre_4)
+
+a_5 = 5
+roots_laguerre_5, weights_laguerre_5 = gauss_laguerre(a_5, n)
+save_to_dat("gauss_laguerre_a5.dat", roots_laguerre_5, weights_laguerre_5)
+
+a_6 = 6
+roots_laguerre_6, weights_laguerre_6 = gauss_laguerre(a_6, n)
+save_to_dat("gauss_laguerre_a6.dat", roots_laguerre_6, weights_laguerre_6)
+
+
 print("All tables saved as .dat files.")
