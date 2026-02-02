@@ -184,7 +184,7 @@ int main(int argc, char** argv) {
             p.sign    = particle_system.theta[ip];
             p.spin_degeneracy = particle_system.spin_degeneracy[ip];
 
-            const double charge_vec[3] = { p.baryon, p.baryon, p.baryon };
+            const double charge_vec[3] = { p.baryon, p.charge, p.strange };
             const double m2 = m * m;
 
             const double j40 = J_kq<4,0>(integrator, p);
