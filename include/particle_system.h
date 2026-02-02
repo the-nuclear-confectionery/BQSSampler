@@ -14,9 +14,9 @@ public:
     int nparticles;
 
     std::vector<int> pid;                 // Particle ID
-    std::vector<std::string> name;        // Name of the particle (e.g., π⁻, π⁺, π⁰)
+    std::vector<std::string> name;        // Name of the particle 
     std::vector<double> mass;             // Mass of the particle
-    std::vector<double> width;            // Width (if applicable)
+    std::vector<double> width;            // Width 
     std::vector<double> spin_degeneracy;  // Spin degeneracy
     std::vector<double> baryon;           // Baryon number
     std::vector<double> strange;          // Strange quark number

@@ -22,6 +22,7 @@ Sampler::Sampler(const Settings& settings): settings(settings)
     std::string tables_path = settings.get_string("tables_path");
     max_w_table.load_from_file(tables_path + "/max_w_table.dat");
     max_w_table_massive.load_from_file(tables_path + "/max_w_table_massive.dat");
+    deltaf_table.load_from_file(tables_path + "/grad_coeffs.dat", 14); 
     accepted = 0;
     tries = 0;
     nabove = 0;
@@ -576,9 +577,9 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
     std::string coordinate_system = settings.get_string("coordinate_system");
     sampled_particles.resize(Nsamples);
 
-    int netB = 0.;
-    int netS = 0.;
-    int netQ = 0.;
+    int netB = surface.Btotal;
+    int netS = surface.Stotal;
+    int netQ = surface.Qtotal;
 
     if (surface.npoints <= 0) throw std::runtime_error("surface.npoints is zero or negative");
 
@@ -875,10 +876,22 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
                                     - Q * muQ
                                     - S * muS) / T) + group.theta[sampled_index]);
                 double delta_f = feq*(1.-group.theta[sampled_index]*feq/group.spin_degeneracy[sampled_index])
-                                    *df_corrections(settings ,lrf, tau_squared, sampled_pLRF, T, E_cell, P_cell, diss_params);
-                            
+                                    *df_corrections(settings,deltaf_table ,lrf, tau_squared, sampled_pLRF, T, E_cell, P_cell, mass,sampled_params ,diss_params);
+                         
+                //normalize delta_f
+                if (settings.get_bool("normalize_deltaf")) {
+                    if (delta_f >  feq) delta_f =  feq;
+                    if (delta_f < -feq) delta_f = -feq;
+                }
+                
                 double weight_visc = 0.5*(1. + delta_f/feq);
-                bool add_particle = std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_keep) < (flux * weight_visc);
+
+                const double u_keep =
+                    std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_keep);
+                const double u_y =
+                    std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_y);  
+
+                bool add_particle = u_keep < (flux * weight_visc);
                 if (!add_particle) continue;
 
                 lrf.boost_momentum_to_lab(tau_squared, sampled_pLRF);
@@ -893,8 +906,7 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
                 double yp = 0.0;
 
                 if (D == 2) {
-                    double random_number = std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_y);
-                    yp = y_max * (2.0 * random_number - 1.0);
+                    yp = y_max * (2.0 * u_y - 1.0);
                     double sinhy = sinh(yp);
                     double coshy = sqrt(1.0 + sinhy * sinhy);
 

@@ -49,8 +49,8 @@ int main(int argc, char** argv) {
     //integrator.load_integration_tables("../integration_tables/gauss_laguerre_a0.dat", "laguerre");
     //integrator.load_integration_tables("../integration_tables/gauss_laguerre_a1.dat", "laguerre_alpha1");
     integrator.load_integration_tables(tables_path + "/gauss_legendre.dat", "legendre");
-    integrator.load_integration_tables(tables_path + "/gauss_laguerre_a0.dat", "laguerre");
-    integrator.load_integration_tables(tables_path + "/gauss_laguerre_a1.dat", "laguerre_alpha1");
+    integrator.load_integration_tables(tables_path + "/gauss_laguerre_a0.dat", "laguerre", 0);
+    integrator.load_integration_tables(tables_path + "/gauss_laguerre_a1.dat", "laguerre", 1);
 
 
     //test_Gauss_Legendre(integrator);

@@ -80,6 +80,8 @@ private:
     Table2D max_w_table;
     Table2D max_w_table_massive;
 
+    Table4D deltaf_table;
+
     //sampled particle vectors
     std::vector< std::vector <Particle> > sampled_particles;
 

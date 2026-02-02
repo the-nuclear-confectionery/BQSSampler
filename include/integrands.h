@@ -15,6 +15,7 @@ struct ThermalParams {
     double strange;
     double charge;
     double sign;
+    double spin_degeneracy;
 };
 
 struct DissipativeParams {

@@ -39,6 +39,7 @@ public:
     std::string path;       // Path to the surface data file
     int npoints;             // Number of surface points (calculated automatically)
     std::vector<SurfacePoint> points;  // Vector of surface points
+    double Btotal, Stotal, Qtotal; // Total charge in the initial condition 
 
     std::vector<double> tau, x, y, eta; // Spacetime coordinates
     std::vector<double> ut, ux, uy, ueta; // Fluid velocity components

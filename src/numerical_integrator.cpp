@@ -13,7 +13,7 @@ NumericalIntegrator::NumericalIntegrator() {}
 /// and stores the roots and weights for different numerical integration methods.
 /// @param filename The path to the file containing the integration tables
 /// @param method The numerical integration method to load the tables for
-void NumericalIntegrator::load_integration_tables(const std::string& filename, const std::string& method) {
+void NumericalIntegrator::load_integration_tables(const std::string& filename, const std::string& method, int alpha) {
     std::ifstream file(filename);
     if (!file.is_open()) {
         std::cerr << "Error: Could not open file " << filename << std::endl;
@@ -21,7 +21,6 @@ void NumericalIntegrator::load_integration_tables(const std::string& filename, c
     }
 
     std::string line;
-    int alpha = 0;  // Default to alpha = 0
     while (std::getline(file, line)) {
         double root, weight;
         std::istringstream ss(line);
@@ -39,15 +38,7 @@ void NumericalIntegrator::load_integration_tables(const std::string& filename, c
             }
             roots_gauss_laguerre[alpha].push_back(root);
             weights_gauss_laguerre[alpha].push_back(weight);
-        } else if (method == "laguerre_alpha1") {
-            // Read Gauss-Laguerre roots and weights for alpha = 1
-            alpha = 1;
-            if (roots_gauss_laguerre.size() <= alpha) {
-                roots_gauss_laguerre.resize(alpha + 1); // Resize if new alpha is encountered
-                weights_gauss_laguerre.resize(alpha + 1);
-            }
-            roots_gauss_laguerre[alpha].push_back(root);
-            weights_gauss_laguerre[alpha].push_back(weight);
+
         } else {
             std::cerr << "Error: Unknown method '" << method << "'!" << std::endl;
             file.close();
@@ -56,6 +47,24 @@ void NumericalIntegrator::load_integration_tables(const std::string& filename, c
     }
 
     file.close();
+    //print the table label and the read file
+    std::cout << "Loaded " << method << " integration table from " << filename << std::endl;
+    std::cout << "Number of points: ";
+    int size = 0;
+    //if (method == "legendre") {
+    //    std::cout << roots_gauss_legendre.size() << std::endl;
+    //    size = roots_gauss_legendre.size();
+    //} else if (method == "laguerre") {
+    //    std::cout << roots_gauss_laguerre[alpha].size() << "" << std::endl;
+    //    size = roots_gauss_laguerre[alpha].size();
+    //}
+    //for (int i = 0; i < size; ++i) {
+    //    if (method == "legendre") {
+    //        std::cout << "Root: " << roots_gauss_legendre[i] << ", Weight: " << weights_gauss_legendre[i] << std::endl;
+    //    } else if (method == "laguerre") {
+    //        std::cout << "Root: " << roots_gauss_laguerre[alpha][i] << ", Weight: " << weights_gauss_laguerre[alpha][i] << std::endl;
+    //    }
+    //}
 }
 
 

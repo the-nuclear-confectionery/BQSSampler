@@ -12,7 +12,7 @@ public:
     NumericalIntegrator();
 
     // Load roots and weights for a specified quadrature method (Gauss-Legendre or Gauss-Laguerre)
-    void load_integration_tables(const std::string& filename, const std::string& method);
+    void load_integration_tables(const std::string& filename, const std::string& method, int alpha = 0);
 
     // Integration functions
     double gauss_quadrature(double integrand(double root, const ThermalParams& params), const ThermalParams& params,
