@@ -74,25 +74,27 @@ void ParticleSystem::read_particle_list(const std::string& filename) {
             baryons++;
 
             // add antibaryons to vectors
-            this->pid.push_back(-pid);
-            this->name.push_back("anti-" + name);
-            this->mass.push_back(mass);
-            this->width.push_back(width);
-            this->spin_degeneracy.push_back(spin_degeneracy);
-            this->baryon.push_back(-baryon);
-            this->strange.push_back(-strange);
-            this->charm.push_back(-charm);
-            this->bottom.push_back(-bottom);
-            this->isospin_degeneracy.push_back(isospin_degeneracy);
-            this->charge.push_back(-charge);
-            this->decays.push_back(decays);
-            this->theta.push_back(theta);
-            this->particle_species_number.push_back(0.0);
-            this->equilibrium_density.push_back(0.0);
-            nparticles++;
-            antibaryons++;
+            //this->pid.push_back(-pid);
+            //this->name.push_back("anti-" + name);
+            //this->mass.push_back(mass);
+            //this->width.push_back(width);
+            //this->spin_degeneracy.push_back(spin_degeneracy);
+            //this->baryon.push_back(-baryon);
+            //this->strange.push_back(-strange);
+            //this->charm.push_back(-charm);
+            //this->bottom.push_back(-bottom);
+            //this->isospin_degeneracy.push_back(isospin_degeneracy);
+            //this->charge.push_back(-charge);
+            //this->decays.push_back(decays);
+            //this->theta.push_back(theta);
+            //this->particle_species_number.push_back(0.0);
+            //this->equilibrium_density.push_back(0.0);
+        }
+        else{
+          antibaryons++;
         }
 
+ 
 
         // Skip decay product lines
         for (int i = 0; i < decays; ++i) {
@@ -121,6 +123,17 @@ void ParticleSystem::display_all_particles() const {
           << ", Charge: " << charge[i] << ", Decays: " << decays[i] 
           << ", Equilibrium Density: " << equilibrium_density[i] << std::endl;
     }
+    double B=0.0;
+    double Q=0.0;
+    double S=0.0;
+
+    for (int i = 0; i < nparticles; ++i) {
+        B += baryon[i];
+        Q += charge[i];
+        S += strange[i];
+    }
+    std::cout << "Total Baryon Number: " << B << ", Total Charge: " << Q << ", Total Strangeness: " << S << std::endl;
+    
 }
 
 
@@ -188,6 +201,7 @@ double ParticleSystem::calculate_particle_number(double T, double muB, double mu
         
         equilibrium_density[i] = particle_equilibrium_density;
         particle_density += particle_equilibrium_density;
+        /// 2 factor to cancel the weight_visc 1/2 
         particle_species_number[i] = 2. * particle_equilibrium_density;
         //std::cout << "Particle ID: " << pid[i] << ", Equilibrium Density: " << particle_equilibrium_density << ", Particle Species Number: " << particle_species_number[i] << std::endl;
         //check for positive pion 
@@ -195,7 +209,7 @@ double ParticleSystem::calculate_particle_number(double T, double muB, double mu
 
 
     }
-    /// @todo check this 2. factor
+    /// 2 factor to cancel the weight_visc 1/2 
     return particle_density*2.;
 }
 

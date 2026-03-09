@@ -301,6 +301,7 @@ void Surface::read_data()
 
         double udsigma = aux_ut * dat + aux_ux * dax + aux_uy * day + aux_ueta * dan;
 
+
         aux_u_dot_dsigma = udsigma;
 
         // Store the data in the vectors
@@ -317,8 +318,13 @@ void Surface::read_data()
         dsigma_y.push_back(aux_dsigma_y);
         dsigma_eta.push_back(aux_dsigma_eta);
         E.push_back(aux_E);
+        //check if force_temperature is true, if so override aux_T with the value in settings
+        if (settings.get_bool("force_temperature")) {
+            aux_T = settings.get_double("temperature");
+        }
         T.push_back(aux_T);
         P.push_back(aux_P);
+        s.push_back(aux_s);
 
         if (settings.get_bool("use_mub")) {
             muB.push_back(aux_muB);

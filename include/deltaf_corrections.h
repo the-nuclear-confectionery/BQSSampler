@@ -18,6 +18,7 @@ inline double df_shear(
     const double pLRF[4],   // [E, px, py, pz]
     double T,
     double E,
+    double s0,
     double P,
     double shv_tt, double shv_tx, double shv_ty, double shv_tn,
     double shv_xx, double shv_xy, double shv_xn,
@@ -46,7 +47,8 @@ inline double df_shear(
                px * pz * lrf.shv_xz_lrf +
                py * pz * lrf.shv_yz_lrf);
 
-    return 0.5 * pimunu_pmu_pnu /(T * T * (E + P));
+    //return 0.5 * pimunu_pmu_pnu / (s0);
+    return pimunu_pmu_pnu / (2.0 * (E + P)* T * T);
 }
 
 // --- Bulk correction (currently zero) ---
@@ -67,12 +69,12 @@ inline double df_bulk(
    // std::cout << "Calculating bulk delta-f coefficients for T=" << T << " GeV, muB=" << mub << " GeV, muQ=" << muq << " GeV, muS=" << mus << " GeV." << std::endl;
 
     //if abs(muB), abs(muQ), abs(muS) > 0.8, print warning
-    if (std::abs(mub) >=  0.8 || std::abs(muq) >=  0.8 || std::abs(mus) >= 0.8) {
-        std::cerr << "Warning: |muB|, |muQ|, or |muS| > 0.8 GeV. Diffusion delta-f coefficients may be inaccurate." << std::endl;
+    if (std::abs(mub) >= 2 || std::abs(muq) >=  2 || std::abs(mus) >= 2) {
+        std::cerr << "Warning: |muB|, |muQ|, or |muS| > 0.8 GeV. Bulk delta-f coefficients may be inaccurate." << std::endl;
     }
     //check if t < 0.1 or t > 0.2 GeV
-    if (T <= 0.1 || T >= 0.2) {
-        std::cerr << "Warning: T out of bounds for diffusion delta-f coefficients table." << std::endl;
+    if (T <= 0.1 || T >= 0.3) {
+        std::cerr << "Warning: T out of bounds for bulk delta-f coefficients table." << std::endl;
     }    
     double A_T = table.interpolate(mub,mus,muq,T, 0);
     double A_E = table.interpolate(mub,mus,muq,T, 1);
@@ -171,6 +173,7 @@ inline double df_corrections(
     const double pLRF[4],
     double T,
     double E,
+    double s0,
     double P,
     double mass,
     const ThermalParams& thermal_params,
@@ -186,7 +189,7 @@ inline double df_corrections(
     double df_total = 0.;
     if (settings.get_bool("delta_f_shear")) {
         double df_s = df_shear(
-            lrf, tau_squared, pLRF, T, E, P,
+            lrf, tau_squared, pLRF, T, E, s0, P,
             diss_params.shv_tt, diss_params.shv_tx, diss_params.shv_ty, diss_params.shv_teta,
             diss_params.shv_xx, diss_params.shv_xy, diss_params.shv_xeta,
             diss_params.shv_yy, diss_params.shv_yeta, diss_params.shv_etaeta

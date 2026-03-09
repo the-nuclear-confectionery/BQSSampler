@@ -91,6 +91,9 @@ private:
     std::default_random_engine gen_keep;
     std::default_random_engine gen_y;
     std::default_random_engine gen_trim;
+    std::default_random_engine gen_pos;
+
+    double pos_smearing;
 
 };
 

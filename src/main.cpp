@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
     std::cout << "Particle list read successfully." << std::endl;
     // print data
     std::cout << "Number of particles: " << particle_system.nparticles << std::endl;
+    //particle_system.display_all_particles();
 
 
     // Create a NumericalIntegrator object

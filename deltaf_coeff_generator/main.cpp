@@ -112,10 +112,10 @@ int main(int argc, char** argv) {
     integrator.load_integration_tables(tables_path + "/gauss_laguerre_a6.dat", "laguerre", 6);
 
     // ----------------- 4D grid declared in code -----------------
-    const double T_min   = 0.10,  T_max   = 0.20;  const int T_pts   = 41;
-    const double muB_min = -0.80, muB_max = 0.80;  const int muB_pts = 21;
-    const double muQ_min = -0.80, muQ_max = 0.80;  const int muQ_pts = 21;
-    const double muS_min = -0.80, muS_max = 0.80;  const int muS_pts = 21;
+    const double T_min   = 0.10,  T_max   = 0.30;  const int T_pts   = 51;
+    const double muB_min = -2.0, muB_max = 2.0;  const int muB_pts = 31;
+    const double muQ_min = -2.0, muQ_max = 2.0;  const int muQ_pts = 31;
+    const double muS_min = -2.0, muS_max = 2.0;  const int muS_pts = 31;
 
     const auto T_grid   = linspace(T_min,   T_max,   T_pts);
     const auto muB_grid = linspace(muB_min, muB_max, muB_pts);
