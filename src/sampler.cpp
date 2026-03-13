@@ -27,13 +27,13 @@ Sampler::Sampler(const Settings& settings): settings(settings)
     tries = 0;
     nabove = 0;
     nabove_massive = 0;
-    this->gen_poisson = std::default_random_engine(sampler_seed);
-    this->gen_type = std::default_random_engine(sampler_seed + 10000);
-    this->gen_mom = std::default_random_engine(sampler_seed + 20000);
-    this->gen_keep = std::default_random_engine(sampler_seed + 30000);
-    this->gen_y = std::default_random_engine(sampler_seed + 40000);
-    this->gen_trim = std::default_random_engine(sampler_seed + 50000);
-    this->gen_pos  = std::default_random_engine(sampler_seed + 60000);
+    this->gen_poisson = std::mt19937(sampler_seed);
+    this->gen_type    = std::mt19937(sampler_seed + 10000);
+    this->gen_mom     = std::mt19937(sampler_seed + 20000);
+    this->gen_keep    = std::mt19937(sampler_seed + 30000);
+    this->gen_y       = std::mt19937(sampler_seed + 40000);
+    this->gen_trim    = std::mt19937(sampler_seed + 50000);
+    this->gen_pos     = std::mt19937(sampler_seed + 60000);
     pos_smearing = settings.has_key("position_smearing") ? settings.get_double("position_smearing") : 0.0;
 
 
@@ -62,8 +62,10 @@ void Sampler::sample_unconstrained(ParticleSystem& all_particles,
     for (int icell = 0; icell < surface.npoints; ++icell) {
 
         //print percentage of progress
-        if (icell % (surface.npoints / 20) == 0) {
+        { int step = std::max(1, surface.npoints / 20);
+          if (icell % step == 0) {
             std::cout << "Integration progress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "% completed" << std::endl;
+          }
         }
 
         double udsigma = surface.ut[icell] * surface.dsigma_t[icell]
@@ -122,7 +124,7 @@ void Sampler::sample_unconstrained(ParticleSystem& all_particles,
 
 
 
-void Sampler::sample_momentum(const ThermalParams& params, double pLRF[4], std::default_random_engine& generator_momentum) {
+void Sampler::sample_momentum(const ThermalParams& params, double pLRF[4], std::mt19937& generator_momentum) {
     
     double max_w;   
 
@@ -395,8 +397,10 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
         double muB = surface.muB[icell];
         double muS = surface.muS[icell];
         double muQ = surface.muQ[icell];
-        if (icell % (surface.npoints / 20) == 0) {
+        { int step = std::max(1, surface.npoints / 20);
+          if (icell % step == 0) {
             std::cout << "Integration rogress: " << (static_cast<double>(icell) / surface.npoints) * 100 << "% completed" << std::endl;
+          }
         }
         double udsigma = surface.ut[icell] * surface.dsigma_t[icell]
                        + surface.ux[icell] * surface.dsigma_x[icell]
@@ -686,28 +690,18 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
                 double yp = 0.0;
                 double t,z;
                 if (D == 2) {
-                    const double mT = std::sqrt(mass*mass + px*px + py*py);
-                
-                    const double ptau     = lrf.pLab_tau;
-                    const double tau_peta = tau * lrf.pLab_eta;
-                
-                    const double y_minus_eta_s =
-                        0.5 * std::log((ptau + tau_peta) / (ptau - tau_peta));
-                
-                    yp = y_max * (2.0*u_y - 1.0);
-                    const double eta_s = yp - y_minus_eta_s;
-                
-                    cosheta = std::cosh(eta_s);
-                    sinheta = std::sinh(eta_s);
-                
-                    // position
-                    t = tau * cosheta;
-                    z = tau * sinheta;
-                
-                    // convert to cartesian pz and E
-                    E = ptau * cosheta + tau_peta * sinheta;
-                    pz = ptau * sinheta + tau_peta * cosheta;
+                    yp = y_max * (2.0 * u_y - 1.0);
+                    double sinhy = sinh(yp);
+                    double coshy = sqrt(1.0 + sinhy * sinhy);
 
+                    double mT = sqrt(mass * mass + px * px + py * py);
+                    double ptau = lrf.pLab_tau;
+                    double tau_pn = tau * lrf.pLab_eta;
+
+                    sinheta = (ptau * sinhy - tau_pn * coshy) / mT;
+                    cosheta = sqrt(1.0 + sinheta * sinheta);
+                    pz = mT * sinhy;
+                    E  = mT * coshy;
 
                 } else if (D == 3) {
                     if (coord == "cartesian") {

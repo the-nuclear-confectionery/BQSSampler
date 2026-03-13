@@ -34,7 +34,7 @@ public:
     double get_max_w(const ThermalParams& params);
     double get_max_w_massive(const ThermalParams& params);
 
-    void sample_momentum(const ThermalParams& params, double pLRF[4], std::default_random_engine& generator_momentum);
+    void sample_momentum(const ThermalParams& params, double pLRF[4], std::mt19937& generator_momentum);
 
 
     void save_particles(const std::string& filename) const;
@@ -85,13 +85,13 @@ private:
     //sampled particle vectors
     std::vector< std::vector <Particle> > sampled_particles;
 
-    std::default_random_engine gen_poisson;
-    std::default_random_engine gen_type;
-    std::default_random_engine gen_mom;
-    std::default_random_engine gen_keep;
-    std::default_random_engine gen_y;
-    std::default_random_engine gen_trim;
-    std::default_random_engine gen_pos;
+    std::mt19937 gen_poisson;
+    std::mt19937 gen_type;
+    std::mt19937 gen_mom;
+    std::mt19937 gen_keep;
+    std::mt19937 gen_y;
+    std::mt19937 gen_trim;
+    std::mt19937 gen_pos;
 
     double pos_smearing;
 
