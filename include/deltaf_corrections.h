@@ -51,11 +51,13 @@ inline double df_shear(
     return pimunu_pmu_pnu / (2.0 * (E + P)* T * T);
 }
 
-// --- Bulk correction (currently zero) ---
+// --- Bulk correction ---
+// E_p is the particle energy in the LRF (= u.p = pLRF[0]),
+// NOT the cell energy density.
 inline double df_bulk(
     Table4D& table,
     double T,
-    double E,
+    double E_p,
     double mass,
     const ThermalParams& thermal_params,
     double Pi
@@ -74,18 +76,19 @@ inline double df_bulk(
     }
     //check if t < 0.1 or t > 0.2 GeV
     if (T <= 0.1 || T >= 0.3) {
-        std::cerr << "Warning: T out of bounds for bulk delta-f coefficients table." << std::endl;
+        std::cout << "Warning: T out of bounds for bulk delta-f coefficients table." << std::endl;
+        return 0.0;
     }    
-    double A_T = table.interpolate(mub,mus,muq,T, 0);
-    double A_E = table.interpolate(mub,mus,muq,T, 1);
-    double A_B_baryon = table.interpolate(mub,mus,muq,T, 2);
-    double A_B_charge = table.interpolate(mub,mus,muq,T, 3);
-    double A_B_strange = table.interpolate(mub,mus,muq,T, 4);
+    double A_T = table.interpolate(mub,muq,mus,T, 0);
+    double A_E = table.interpolate(mub,muq,mus,T, 1);
+    double A_B_baryon = table.interpolate(mub,muq,mus,T, 2);
+    double A_B_charge = table.interpolate(mub,muq,mus,T, 3);
+    double A_B_strange = table.interpolate(mub,muq,mus,T, 4);
 
-    double delta_f = A_T*Pi*mass*mass + A_E*Pi*E*E
-                     + A_B_baryon*Pi*E*thermal_params.baryon
-                     + A_B_charge*Pi*E*thermal_params.charge
-                     + A_B_strange*Pi*E*thermal_params.strange;
+    double delta_f = A_T*Pi*mass*mass + A_E*Pi*E_p*E_p
+                     + A_B_baryon*Pi*E_p*thermal_params.baryon
+                     + A_B_charge*Pi*E_p*thermal_params.charge
+                     + A_B_strange*Pi*E_p*thermal_params.strange;
 
     return delta_f;
 }
@@ -125,7 +128,10 @@ inline double df_diffusion(
         tau_squared, q_S0, q_Sx, q_Sy, q_Seta,
         Vs_x_lrf, Vs_y_lrf, Vs_z_lrf
     );
-
+    if (T <= 0.1 || T >= 0.3) {
+        std::cout << "Warning: T out of bounds for diff delta-f coefficients table." << std::endl;
+        return 0.0;
+    }       
 
     double A_V_bb = deltaf_table.interpolate(muB, muQ, muS, T, 5);
     double A_V_bq = deltaf_table.interpolate(muB, muQ, muS, T, 6);
@@ -156,8 +162,8 @@ inline double df_diffusion(
                      + thermal_params.charge * (C_V_qx * pLRF[1] + C_V_qy * pLRF[2] + C_V_qz * pLRF[3])
                      + thermal_params.strange * (C_V_sx * pLRF[1] + C_V_sy * pLRF[2] + C_V_sz * pLRF[3]);
 
-    // Add E c_Q_mu p^mu term
-    delta_f += E * (C_Q_x * pLRF[1] + C_Q_y * pLRF[2] + C_Q_z * pLRF[3]);
+    // Add E_p c_Q_mu p^mu term (E_p = particle energy in LRF)
+    delta_f += pLRF[0] * (C_Q_x * pLRF[1] + C_Q_y * pLRF[2] + C_Q_z * pLRF[3]);
 
     return delta_f;
 }
@@ -200,7 +206,7 @@ inline double df_corrections(
         double df_b = df_bulk(
             coefficients_table,
             T,
-            E,
+            pLRF[0],
             mass,
             thermal_params,
             diss_params.bulk

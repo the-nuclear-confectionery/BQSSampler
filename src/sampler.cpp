@@ -589,9 +589,7 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
             lrf.boost_dsigma_to_lrf(tau_squared);
             lrf.compute_dsigma_magnitude();
             N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
-            if (N_tot_cell <= 0.0) {
-                std::cerr << "Warning: N_tot_cell = " << N_tot_cell << " is non-positive for cell " << icell << ". Skipping this cell." << std::endl;
-            }
+
             if (N_tot_cell <= 0.0) continue;
 
             std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
@@ -668,7 +666,7 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
                     if (delta_f < -feq) delta_f = -feq;
                 }
                 
-                double weight_visc = 0.5*(1. + delta_f/feq);
+                double weight_visc = (1. + delta_f/feq);
 
                 const double u_keep =
                     std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_keep);
