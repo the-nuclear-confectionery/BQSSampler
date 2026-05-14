@@ -44,6 +44,6 @@ static double J_kq(const NumericalIntegrator& integ, const ThermalParams& p) {
     const double integral = integ.gauss_quadrature(get_Jkq_integrand<k,q>, p, roots, wts);
 
     double prefactor = p.spin_degeneracy / (2.0 * M_PI * M_PI * std::pow(HBARC,3.0));
-    return prefactor * odd_double_factorial(k + 2) * std::pow(p.T, k + 2) * integral;
+    return prefactor * std::pow(p.T, k + 2) * integral / odd_double_factorial(2*q + 1);
 }
 
