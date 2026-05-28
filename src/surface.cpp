@@ -282,6 +282,12 @@ void Surface::read_data()
         surface_file >> aux_diff_Qy;
         surface_file >> aux_diff_Qeta;
         }
+
+        int aux_eos_type = 0;
+        if (mode != "ccakev1" && settings.has_key("eos_column") && settings.get_bool("eos_column")) {
+            surface_file >> aux_eos_type;
+        }
+
         //calculate q0 components
         double aux_diff_B0 = -(aux_diff_Bx * ux_cov + aux_diff_By * uy_cov + aux_diff_Beta * un_cov) / aux_ut;
         double aux_diff_S0 = -(aux_diff_Sx * ux_cov + aux_diff_Sy * uy_cov + aux_diff_Seta * un_cov) / aux_ut;
@@ -368,6 +374,7 @@ void Surface::read_data()
         diff_Qx.push_back(aux_diff_Qx);
         diff_Qy.push_back(aux_diff_Qy);
         diff_Qeta.push_back(aux_diff_Qeta);
+        eos_type.push_back(aux_eos_type);
 
         //aux quantities
         N_baryons_cell.push_back(0.0);

@@ -48,6 +48,7 @@ public:
     const ParticleSystem& group,
     const Surface& surface,
     const std::vector<double>& N_cell_vector,
+    const std::vector<std::vector<double>>& N_species_cell,
     int required,
     const std::string& coord);
 

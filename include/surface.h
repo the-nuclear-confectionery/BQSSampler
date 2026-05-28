@@ -59,6 +59,9 @@ public:
     std::vector<double> diff_S0, diff_Sx, diff_Sy, diff_Seta;
     std::vector<double> diff_Q0, diff_Qx, diff_Qy, diff_Qeta;
 
+    // EoS type per surface point (1 = table, 0 = HRG); populated only when eos_column=true
+    std::vector<int> eos_type;
+
     // Aux quantities
     std::vector<double> N_baryons_cell;
     std::vector<double> N_antibaryons_cell;
