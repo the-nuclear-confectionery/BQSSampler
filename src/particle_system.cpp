@@ -201,15 +201,15 @@ double ParticleSystem::calculate_particle_number(double T, double muB, double mu
         
         equilibrium_density[i] = particle_equilibrium_density;
         particle_density += particle_equilibrium_density;
-        /// 2 factor to cancel the weight_visc 1/2 
-        particle_species_number[i] = particle_equilibrium_density;
+        /// 2 factor to cancel the weight_visc 1/2
+        particle_species_number[i] = 2. * particle_equilibrium_density;
         //std::cout << "Particle ID: " << pid[i] << ", Equilibrium Density: " << particle_equilibrium_density << ", Particle Species Number: " << particle_species_number[i] << std::endl;
         //check for positive pion 
 
 
 
     }
-    /// 2 factor to cancel the weight_visc 1/2 
-    return particle_density;
+    /// 2 factor to cancel the weight_visc 1/2
+    return particle_density*2.;
 }
 

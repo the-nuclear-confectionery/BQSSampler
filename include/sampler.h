@@ -9,6 +9,7 @@
 #include <cstdio> 
 
 #include "surface.h"
+#include "fluid_cell.h"
 #include "particle.h"
 #include "particle_system.h"
 #include "lrf.h"
@@ -38,6 +39,8 @@ public:
 
 
     void save_particles(const std::string& filename) const;
+    void save_particles(const std::string& filename,
+                        const std::vector<std::vector<Particle>>& particles) const;
     void calculate_integrated_ntot(ParticleSystem& particle_system, Surface& surface, const NumericalIntegrator& integrator);
 
     void check_total_charge_average(double totalB, double totalS, double totalQ, int Nsamples);
@@ -50,13 +53,38 @@ public:
     const std::vector<double>& N_cell_vector,
     const std::vector<std::vector<double>>& N_species_cell,
     int required,
-    const std::string& coord);
+    const std::string& coord,
+    std::vector<Particle>* neg_out = nullptr);
+
+    // Sample particles from a single fluid cell. The mean particle number is
+    // computed internally (thermal integral + Poisson draw), so callers only
+    // need to supply the cell, the particle group, and the integrator.
+    std::vector<Particle> sample_cell(
+    const FluidCell& cell,
+    ParticleSystem& group,
+    const NumericalIntegrator& integrator);
 
     double net_baryon(const std::vector<Particle>& particles);
     double net_strangeness(const std::vector<Particle>& particles);
     double net_charge(const std::vector<Particle>& particles);
 
 private:
+    // Core single-cell sampling routine shared by sample_cell and the
+    // surface-loop entry points. Takes a precomputed mean yield and species
+    // weights, draws a Poisson number of hadrons, and appends accepted
+    // particles to `out`. `max_to_add` caps how many particles this call may
+    // append (-1 = the full Poisson draw); used by fixed-yield callers to stop
+    // exactly on target while preserving the RNG stream.
+    void sample_cell_core(
+    const FluidCell& cell,
+    const ParticleSystem& group,
+    double N_tot_mean,
+    const std::vector<double>& species_weights,
+    const std::string& coord,
+    std::vector<Particle>& out,
+    int max_to_add = -1,
+    std::vector<Particle>* neg_out = nullptr);
+
     //settings reference
     const Settings& settings;
 
@@ -85,6 +113,8 @@ private:
 
     //sampled particle vectors
     std::vector< std::vector <Particle> > sampled_particles;
+    // negative Cooper-Frye contributions (p.dSigma < 0), one vector per event
+    std::vector< std::vector <Particle> > negative_particles;
 
     std::mt19937 gen_poisson;
     std::mt19937 gen_type;
@@ -93,8 +123,10 @@ private:
     std::mt19937 gen_y;
     std::mt19937 gen_trim;
     std::mt19937 gen_pos;
+    std::mt19937 gen_pos_neg;   // position smearing for negative particles (keeps gen_pos stream unperturbed)
 
     double pos_smearing;
+    bool sample_negative;       // opt-in: also collect/write p.dSigma < 0 contributions
 
 };
 

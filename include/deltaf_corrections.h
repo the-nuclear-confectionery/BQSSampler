@@ -70,15 +70,14 @@ inline double df_bulk(
     //print mub,muq,mus, T
    // std::cout << "Calculating bulk delta-f coefficients for T=" << T << " GeV, muB=" << mub << " GeV, muQ=" << muq << " GeV, muS=" << mus << " GeV." << std::endl;
 
-    //if abs(muB), abs(muQ), abs(muS) > 0.8, print warning
-    if (std::abs(mub) >= 2 || std::abs(muq) >=  2 || std::abs(mus) >= 2) {
-        std::cerr << "Warning: |muB|, |muQ|, or |muS| > 0.8 GeV. Bulk delta-f coefficients may be inaccurate." << std::endl;
-    }
-    //check if t < 0.1 or t > 0.2 GeV
-    if (T <= 0.1 || T >= 0.3) {
-        std::cout << "Warning: T out of bounds for bulk delta-f coefficients table." << std::endl;
+    // delta-f coefficient table grid: T in [0.1, 0.3] GeV, muB/muQ/muS in [-2, 2] GeV.
+    // Outside the grid the table interpolation throws out_of_range, so fall back to no
+    // correction (consistent with the diffusion guard). Endpoints are kept in-bounds.
+    if (T < 0.1 || T > 0.3 ||
+        std::abs(mub) > 2.0 || std::abs(muq) > 2.0 || std::abs(mus) > 2.0) {
+        std::cout << "Warning: (T, muB, muQ, muS) out of bounds for bulk delta-f table; skipping bulk correction." << std::endl;
         return 0.0;
-    }    
+    }
     double A_T = table.interpolate(mub,muq,mus,T, 0);
     double A_E = table.interpolate(mub,muq,mus,T, 1);
     double A_B_baryon = table.interpolate(mub,muq,mus,T, 2);
@@ -93,8 +92,11 @@ inline double df_bulk(
     return delta_f;
 }
 
-// --- Diffusion correction 
-// V^mu p_<mu> = - V^i p^j g_{ij} = V^i p^i in LRF
+// --- Diffusion correction
+// V^mu p_<mu> = V^i p^j g_{ij} = - V^i p^i in LRF  (V^mu contravariant, g_{ij} = -delta_{ij})
+// The generator stores CV = -K^{-1}, CQ = +(N31 K^{-1})/J41, derived for the covariant
+// contraction p_<mu> V^mu. Since that equals -(V . p)_Euclidean, the spatial dot products
+// below are taken with the covariant (negative Euclidean) sign.
 inline double df_diffusion(
     LRF& lrf,
     Table4D& deltaf_table,
@@ -112,6 +114,14 @@ inline double df_diffusion(
     double muQ = thermal_params.alphaQ * T;
     double muS = thermal_params.alphaS * T;
 
+    // delta-f coefficient table grid: T in [0.1, 0.3] GeV, muB/muQ/muS in [-2, 2] GeV.
+    // Outside the grid the table interpolation throws out_of_range; fall back to no
+    // correction. Endpoints are kept in-bounds.
+    if (T < 0.1 || T > 0.3 ||
+        std::abs(muB) > 2.0 || std::abs(muQ) > 2.0 || std::abs(muS) > 2.0) {
+        std::cout << "Warning: (T, muB, muQ, muS) out of bounds for diff delta-f table; skipping diffusion correction." << std::endl;
+        return 0.0;
+    }
 
     double Vb_x_lrf, Vb_y_lrf, Vb_z_lrf;
     double Vq_x_lrf, Vq_y_lrf, Vq_z_lrf;
@@ -128,10 +138,6 @@ inline double df_diffusion(
         tau_squared, q_S0, q_Sx, q_Sy, q_Seta,
         Vs_x_lrf, Vs_y_lrf, Vs_z_lrf
     );
-    if (T <= 0.1 || T >= 0.3) {
-        std::cout << "Warning: T out of bounds for diff delta-f coefficients table." << std::endl;
-        return 0.0;
-    }       
 
     double A_V_bb = deltaf_table.interpolate(muB, muQ, muS, T, 5);
     double A_V_bq = deltaf_table.interpolate(muB, muQ, muS, T, 6);
@@ -157,13 +163,15 @@ inline double df_diffusion(
     double C_Q_y = A_q_b * Vb_y_lrf + A_q_q * Vq_y_lrf + A_q_s * Vs_y_lrf;
     double C_Q_z = A_q_b * Vb_z_lrf + A_q_q * Vq_z_lrf + A_q_s * Vs_z_lrf;
 
+    // Covariant contraction in the LRF: C_V^mu p_<mu> = g_{ij} C_V^i p^j = - C_V^i p^i
+    // (V^mu is contravariant and g_{ij} = -delta_{ij}), so each spatial dot carries a minus.
     // q_a C_V_a_mu p^mu
-    double delta_f = thermal_params.baryon * (C_V_bx * pLRF[1] + C_V_by * pLRF[2] + C_V_bz * pLRF[3])
-                     + thermal_params.charge * (C_V_qx * pLRF[1] + C_V_qy * pLRF[2] + C_V_qz * pLRF[3])
-                     + thermal_params.strange * (C_V_sx * pLRF[1] + C_V_sy * pLRF[2] + C_V_sz * pLRF[3]);
+    double delta_f = thermal_params.baryon * (-(C_V_bx * pLRF[1] + C_V_by * pLRF[2] + C_V_bz * pLRF[3]))
+                     + thermal_params.charge * (-(C_V_qx * pLRF[1] + C_V_qy * pLRF[2] + C_V_qz * pLRF[3]))
+                     + thermal_params.strange * (-(C_V_sx * pLRF[1] + C_V_sy * pLRF[2] + C_V_sz * pLRF[3]));
 
-    // Add E_p c_Q_mu p^mu term (E_p = particle energy in LRF)
-    delta_f += pLRF[0] * (C_Q_x * pLRF[1] + C_Q_y * pLRF[2] + C_Q_z * pLRF[3]);
+    // Add E_p c_Q_mu p^mu term (E_p = particle energy in LRF), same covariant sign.
+    delta_f += pLRF[0] * (-(C_Q_x * pLRF[1] + C_Q_y * pLRF[2] + C_Q_z * pLRF[3]));
 
     return delta_f;
 }

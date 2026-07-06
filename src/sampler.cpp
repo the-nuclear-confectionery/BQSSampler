@@ -34,7 +34,9 @@ Sampler::Sampler(const Settings& settings): settings(settings)
     this->gen_y       = std::mt19937(sampler_seed + 40000);
     this->gen_trim    = std::mt19937(sampler_seed + 50000);
     this->gen_pos     = std::mt19937(sampler_seed + 60000);
+    this->gen_pos_neg = std::mt19937(sampler_seed + 70000);
     pos_smearing = settings.has_key("position_smearing") ? settings.get_double("position_smearing") : 0.0;
+    sample_negative = settings.has_key("sample_negative") && settings.get_bool("sample_negative");
 
 
     Nsamples = settings.get_int("samples");
@@ -50,6 +52,7 @@ void Sampler::sample_unconstrained(ParticleSystem& all_particles,
 {
     std::string coordinate_system = settings.get_string("coordinate_system");
     sampled_particles.resize(Nsamples);
+    if (sample_negative) negative_particles.resize(Nsamples);
 
     if (surface.npoints <= 0) throw std::runtime_error("surface.npoints is zero or negative");
 
@@ -98,8 +101,10 @@ void Sampler::sample_unconstrained(ParticleSystem& all_particles,
         if (isample % progress_step == 0) {
             std::cout << "Sampling progress: " << (static_cast<double>(isample) / Nsamples) * 100 << "% completed" << std::endl;
         }
+        std::vector<Particle> neg_event;
         std::vector<Particle> event = sample_fixed_yield_from_surface(
-            all_particles, surface, N_cell, N_species_cell, -1, coordinate_system);
+            all_particles, surface, N_cell, N_species_cell, -1, coordinate_system,
+            sample_negative ? &neg_event : nullptr);
 
         // Accumulate total BSQ
         for (const auto& p : event) {
@@ -109,6 +114,7 @@ void Sampler::sample_unconstrained(ParticleSystem& all_particles,
         }
 
         sampled_particles[isample] = std::move(event);
+        if (sample_negative) negative_particles[isample] = std::move(neg_event);
     }
 
     // --- Step 3: Charge check and save ---
@@ -119,9 +125,15 @@ void Sampler::sample_unconstrained(ParticleSystem& all_particles,
     std::cout << "Saving sampled particles to " << filename << std::endl;
     //print the percentage of skipped cells
     std::cout << "Skipped " << N_skip << " cells out of " << surface.npoints << " cells." << std::endl;
-    std::cout << "Percentage of skipped cells: " 
+    std::cout << "Percentage of skipped cells: "
               << (N_skip / surface.npoints) * 100 << "%" << std::endl;
     save_particles(filename);
+
+    if (sample_negative) {
+        std::string neg_filename = settings.get_string("negative_output_file");
+        std::cout << "Saving negative Cooper-Frye contributions to " << neg_filename << std::endl;
+        save_particles(neg_filename, negative_particles);
+    }
 }
 
 
@@ -331,16 +343,21 @@ double Sampler::get_max_w_massive(const ThermalParams& params) {
 
 
 void Sampler::save_particles(const std::string& filename) const {
+    save_particles(filename, sampled_particles);
+}
+
+void Sampler::save_particles(const std::string& filename,
+                             const std::vector<std::vector<Particle>>& particles) const {
     FILE* f = fopen(filename.c_str(), "w");
     if (!f) {
         perror("Error opening file for writing");
         return;
     }
 
-    for (size_t i = 0; i < sampled_particles.size(); ++i) {
+    for (size_t i = 0; i < particles.size(); ++i) {
         fprintf(f, "# event %zu\n", i);
 
-        for (const auto& p : sampled_particles[i]) {
+        for (const auto& p : particles[i]) {
             // write each particle as a single line
             fprintf(f, "%d %.10f %.10f %.10f %.10f %.10f %.10f %.10f %.10f %.10f\n",
                     p.pid, p.t, p.x, p.y, p.z, p.mass, p.E, p.px, p.py, p.pz);
@@ -460,15 +477,27 @@ void Sampler::conserved_charge_sampling(ParticleSystem& particle_system, Surface
         std::vector<Particle> antibaryon_sample = sample_fixed_yield_from_surface(antibaryons, surface, surface.N_antibaryons_cell, N_antibaryons_species_cell, N_antibaryons, coordinate_system);
         std::cout << "Sampled " << antibaryon_sample.size() << " antibaryons." << std::endl;
 
-        std::vector<Particle> s_mesons = sample_fixed_yield_from_surface(strange_mesons_sminus, surface, surface.N_strange_mesons_sminus_cell, N_sminus_species_cell, -1, coordinate_system);
-        std::cout << "Sampled " << s_mesons.size() << " strange mesons (S = -1)." << std::endl;
-
         int NS_baryons = net_strangeness(baryon_sample) + net_strangeness(antibaryon_sample);
-        int NS_strange = net_strangeness(s_mesons);
-        int NS_needed = NS_baryons + NS_strange - netS;
-        NS_needed = std::abs(NS_needed);
-        std::vector<Particle> anti_strange_mesons = sample_fixed_yield_from_surface(strange_mesons_splus, surface, surface.N_strange_mesons_splus_cell, N_splus_species_cell, NS_needed, coordinate_system);
+
+        // Strangeness balancing mirrors the (correct) charge sector: sample the S = +1
+        // mesons freely in an overshoot loop, then take a signed (non-abs) fixed yield of
+        // S = -1 mesons. The mesons must supply S_remain = netS - NS_baryons of net
+        // strangeness. With anti_strange_mesons (S=+1) sampled until N_splus >= S_remain,
+        // the required S=-1 yield N_sminus = N_splus - S_remain is always >= 0, and the
+        // total strangeness lands exactly on netS in both directions of S_remain.
+        int S_remain = netS - NS_baryons;
+
+        std::vector<Particle> anti_strange_mesons;  // S = +1 (free / overshoot side)
+        int N_splus = -9999999;
+        while (N_splus < S_remain) {
+            anti_strange_mesons = sample_fixed_yield_from_surface(strange_mesons_splus, surface, surface.N_strange_mesons_splus_cell, N_splus_species_cell, -1, coordinate_system);
+            N_splus = net_strangeness(anti_strange_mesons);  // = +count
+        }
         std::cout << "Sampled " << anti_strange_mesons.size() << " strange mesons (S = +1)." << std::endl;
+
+        int N_sminus = N_splus - S_remain;  // = N_splus + NS_baryons - netS, guaranteed >= 0
+        std::vector<Particle> s_mesons = sample_fixed_yield_from_surface(strange_mesons_sminus, surface, surface.N_strange_mesons_sminus_cell, N_sminus_species_cell, N_sminus, coordinate_system);
+        std::cout << "Sampled " << s_mesons.size() << " strange mesons (S = -1)." << std::endl;
 
         std::vector<Particle> pos_mesons;
         int Q_baryons = net_charge(baryon_sample) + net_charge(antibaryon_sample);
@@ -557,7 +586,8 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
     const std::vector<double>& N_cell_vector,
     const std::vector<std::vector<double>>& N_species_cell,
     int required,
-    const std::string& coord)
+    const std::string& coord,
+    std::vector<Particle>* neg_out)
 {
     std::vector<Particle> result;
 
@@ -576,178 +606,10 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
             if (fixed_yield && static_cast<int>(result.size()) >= target_yield)
                 break;
 
-            double T = surface.T[icell];
-            double muB = surface.muB[icell];
-            double muS = surface.muS[icell];
-            double muQ = surface.muQ[icell];
-            double tau = surface.tau[icell];
-            double s0_cell = surface.s[icell];
-            double tau_squared = tau * tau;
-
-            double udsigma = surface.ut[icell] * surface.dsigma_t[icell] 
-                           + surface.ux[icell] * surface.dsigma_x[icell] 
-                           + surface.uy[icell] * surface.dsigma_y[icell] 
-                           + surface.ueta[icell] * surface.dsigma_eta[icell];
-            if (udsigma <= 0.0) continue;
-
-            double N_tot_cell = N_cell_vector[icell];
-
-            std::discrete_distribution<int> type_dist(N_species_cell[icell].begin(),
-                                                      N_species_cell[icell].end());
-
-            LRF lrf(coord,
-                    surface.ut[icell], surface.ux[icell], surface.uy[icell], surface.ueta[icell],
-                    surface.dsigma_t[icell], surface.dsigma_x[icell],
-                    surface.dsigma_y[icell], surface.dsigma_eta[icell], tau);
-
-            lrf.boost_dsigma_to_lrf(tau_squared);
-            lrf.compute_dsigma_magnitude();
-            N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
-
-            if (N_tot_cell <= 0.0) continue;
-
-            std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
-            int N_hadrons = poisson_hadrons(gen_poisson);
-
-            DissipativeParams diss_params;
-            diss_params.shv_tt = surface.shv_tt[icell];
-            diss_params.shv_tx = surface.shv_tx[icell];
-            diss_params.shv_ty = surface.shv_ty[icell];
-            diss_params.shv_teta = surface.shv_teta[icell];
-            diss_params.shv_xx = surface.shv_xx[icell];
-            diss_params.shv_xy = surface.shv_xy[icell];
-            diss_params.shv_xeta = surface.shv_xeta[icell];
-            diss_params.shv_yy = surface.shv_yy[icell]; 
-            diss_params.shv_yeta = surface.shv_yeta[icell];
-            diss_params.shv_etaeta = surface.shv_etaeta[icell];
-            diss_params.bulk = surface.bulk[icell]; 
-            diss_params.q_B0 = surface.diff_B0[icell];
-            diss_params.q_Q0 = surface.diff_Q0[icell];
-            diss_params.q_S0 = surface.diff_S0[icell];
-            diss_params.q_Bx = surface.diff_Bx[icell];
-            diss_params.q_Qx = surface.diff_Qx[icell];
-            diss_params.q_Sx = surface.diff_Sx[icell];
-            diss_params.q_By = surface.diff_By[icell];
-            diss_params.q_Qy = surface.diff_Qy[icell];
-            diss_params.q_Sy = surface.diff_Sy[icell];
-            diss_params.q_Beta = surface.diff_Beta[icell];
-            diss_params.q_Qeta = surface.diff_Qeta[icell];
-            diss_params.q_Seta = surface.diff_Seta[icell];
-
-            for (int i = 0; i < N_hadrons; ++i) {
-                if (fixed_yield && static_cast<int>(result.size()) >= target_yield)
-                    break;
-
-                int sampled_index = type_dist(gen_type);
-                int pid = group.pid[sampled_index];
-                double mass = group.mass[sampled_index];
-                double B = group.baryon[sampled_index];
-                double S = group.strange[sampled_index];
-                double Q = group.charge[sampled_index];
-
-                ThermalParams sampled_params;
-                sampled_params.T = T;
-                sampled_params.alphaB = muB / T;
-                sampled_params.alphaQ = muQ / T;
-                sampled_params.alphaS = muS / T;
-                sampled_params.mbar = mass / T;
-                sampled_params.baryon = B;
-                sampled_params.strange = S;
-                sampled_params.charge = Q;
-                sampled_params.sign = group.theta[sampled_index];
-                
-                double E_cell = surface.E[icell];
-                double P_cell = surface.P[icell];
-                double sampled_pLRF[4] = {0.0};
-                sample_momentum(sampled_params, sampled_pLRF, gen_mom);
-
-                double flux = std::max(0.0, lrf.dsigma_t_lrf * sampled_pLRF[0]
-                                             - lrf.dsigma_x_lrf * sampled_pLRF[1]
-                                             - lrf.dsigma_y_lrf * sampled_pLRF[2]
-                                             - lrf.dsigma_z_lrf * sampled_pLRF[3])
-                              / (lrf.dsigma_magnitude * sampled_pLRF[0]);
-
-                double feq = group.spin_degeneracy[sampled_index]/(std::exp((sampled_pLRF[0]
-                                    - B * muB
-                                    - Q * muQ
-                                    - S * muS) / T) + group.theta[sampled_index]);
-                double delta_f = feq*(1.-group.theta[sampled_index]*feq/group.spin_degeneracy[sampled_index])
-                                    *df_corrections(settings,deltaf_table ,lrf, tau_squared, sampled_pLRF, T, E_cell,s0_cell, P_cell, mass,sampled_params ,diss_params);
-                         
-                //normalize delta_f
-                if (settings.get_bool("normalize_deltaf")) {
-                    if (delta_f >  feq) delta_f =  feq;
-                    if (delta_f < -feq) delta_f = -feq;
-                }
-                
-                double weight_visc = (1. + delta_f/feq);
-
-                const double u_keep =
-                    std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_keep);
-                const double u_y =
-                    std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_y);  
-
-                bool add_particle = u_keep < (flux * weight_visc);
-                if (!add_particle) continue;
-
-                lrf.boost_momentum_to_lab(tau_squared, sampled_pLRF);
-
-                double sinheta = sinh(surface.eta[icell]);
-                double cosheta = sqrt(1.0 + sinheta * sinheta);
-
-                double px = lrf.pLab_x;
-                double py = lrf.pLab_y;
-                double pz = 0.0;
-                double E = 0.0;
-                double yp = 0.0;
-                double t,z;
-                if (D == 2) {
-                    yp = y_max * (2.0 * u_y - 1.0);
-                    double sinhy = sinh(yp);
-                    double coshy = sqrt(1.0 + sinhy * sinhy);
-
-                    double mT = sqrt(mass * mass + px * px + py * py);
-                    double ptau = lrf.pLab_tau;
-                    double tau_pn = tau * lrf.pLab_eta;
-
-                    sinheta = (ptau * sinhy - tau_pn * coshy) / mT;
-                    cosheta = sqrt(1.0 + sinheta * sinheta);
-                    pz = mT * sinhy;
-                    E  = mT * coshy;
-
-                } else if (D == 3) {
-                    if (coord == "cartesian") {
-                        pz = lrf.pLab_eta;
-                    } else {
-                        pz = tau * lrf.pLab_eta * cosheta + lrf.pLab_tau * sinheta;
-                    }
-                    E = sqrt(mass * mass + px * px + py * py + pz * pz);
-                    yp = 0.5 * log((E + pz) / (E - pz));
-                }
-
-                double x = surface.x[icell];
-                double y = surface.y[icell];
-
-                if(coord == "cartesian"){
-                    t = tau;
-                    z = surface.eta[icell];
-                }
-                else{
-                    t = tau * cosheta;
-                    z = tau * sinheta;
-                }
-
-                if (pos_smearing > 0.0) {
-                    std::uniform_real_distribution<double> smear(-pos_smearing, pos_smearing);
-                    x += smear(gen_pos);
-                    y += smear(gen_pos);
-                    z += smear(gen_pos);
-                }
-
-                Particle p(pid, mass, E, px, py, pz, t, x, y, z,
-                           static_cast<int>(B), static_cast<int>(S), static_cast<int>(Q));
-                result.push_back(p);
-            }
+            int remaining = fixed_yield ? (target_yield - static_cast<int>(result.size())) : -1;
+            sample_cell_core(surface.get_cell(icell), group,
+                             N_cell_vector[icell], N_species_cell[icell],
+                             coord, result, remaining, neg_out);
         }
     }
 
@@ -758,4 +620,224 @@ std::vector<Particle> Sampler::sample_fixed_yield_from_surface(
     }
 
     return result;
+}
+
+
+std::vector<Particle> Sampler::sample_cell(
+    const FluidCell& cell,
+    ParticleSystem& group,
+    const NumericalIntegrator& integrator)
+{
+    // Compute the mean particle number for this cell (also fills
+    // group.particle_species_number with the per-species means).
+    double N_mean = group.calculate_particle_number(cell.T, cell.muB, cell.muQ, cell.muS, integrator);
+    std::vector<double> weights = group.particle_species_number;
+
+    std::vector<Particle> out;
+    sample_cell_core(cell, group, N_mean, weights,
+                     settings.get_string("coordinate_system"), out, -1);
+    return out;
+}
+
+
+void Sampler::sample_cell_core(
+    const FluidCell& cell,
+    const ParticleSystem& group,
+    double N_tot_mean,
+    const std::vector<double>& species_weights,
+    const std::string& coord,
+    std::vector<Particle>& out,
+    int max_to_add,
+    std::vector<Particle>* neg_out)
+{
+    double T = cell.T;
+    double muB = cell.muB;
+    double muS = cell.muS;
+    double muQ = cell.muQ;
+    double tau = cell.tau;
+    double s0_cell = cell.s;
+    double tau_squared = tau * tau;
+
+    double udsigma = cell.ut * cell.dsigma_t
+                   + cell.ux * cell.dsigma_x
+                   + cell.uy * cell.dsigma_y
+                   + cell.ueta * cell.dsigma_eta;
+    if (udsigma <= 0.0) return;
+
+    double N_tot_cell = N_tot_mean;
+
+    std::discrete_distribution<int> type_dist(species_weights.begin(),
+                                              species_weights.end());
+
+    LRF lrf(coord,
+            cell.ut, cell.ux, cell.uy, cell.ueta,
+            cell.dsigma_t, cell.dsigma_x,
+            cell.dsigma_y, cell.dsigma_eta, tau);
+
+    lrf.boost_dsigma_to_lrf(tau_squared);
+    lrf.compute_dsigma_magnitude();
+    N_tot_cell *= 2.0 * y_max * lrf.dsigma_magnitude;
+
+    if (N_tot_cell <= 0.0) return;
+
+    std::poisson_distribution<int> poisson_hadrons(N_tot_cell);
+    int N_hadrons = poisson_hadrons(gen_poisson);
+
+    DissipativeParams diss_params;
+    diss_params.shv_tt = cell.shv_tt;
+    diss_params.shv_tx = cell.shv_tx;
+    diss_params.shv_ty = cell.shv_ty;
+    diss_params.shv_teta = cell.shv_teta;
+    diss_params.shv_xx = cell.shv_xx;
+    diss_params.shv_xy = cell.shv_xy;
+    diss_params.shv_xeta = cell.shv_xeta;
+    diss_params.shv_yy = cell.shv_yy;
+    diss_params.shv_yeta = cell.shv_yeta;
+    diss_params.shv_etaeta = cell.shv_etaeta;
+    diss_params.bulk = cell.bulk;
+    diss_params.q_B0 = cell.diff_B0;
+    diss_params.q_Q0 = cell.diff_Q0;
+    diss_params.q_S0 = cell.diff_S0;
+    diss_params.q_Bx = cell.diff_Bx;
+    diss_params.q_Qx = cell.diff_Qx;
+    diss_params.q_Sx = cell.diff_Sx;
+    diss_params.q_By = cell.diff_By;
+    diss_params.q_Qy = cell.diff_Qy;
+    diss_params.q_Sy = cell.diff_Sy;
+    diss_params.q_Beta = cell.diff_Beta;
+    diss_params.q_Qeta = cell.diff_Qeta;
+    diss_params.q_Seta = cell.diff_Seta;
+
+    int added = 0;
+    for (int i = 0; i < N_hadrons; ++i) {
+        if (max_to_add >= 0 && added >= max_to_add)
+            break;
+
+        int sampled_index = type_dist(gen_type);
+        int pid = group.pid[sampled_index];
+        double mass = group.mass[sampled_index];
+        double B = group.baryon[sampled_index];
+        double S = group.strange[sampled_index];
+        double Q = group.charge[sampled_index];
+
+        ThermalParams sampled_params;
+        sampled_params.T = T;
+        sampled_params.alphaB = muB / T;
+        sampled_params.alphaQ = muQ / T;
+        sampled_params.alphaS = muS / T;
+        sampled_params.mbar = mass / T;
+        sampled_params.baryon = B;
+        sampled_params.strange = S;
+        sampled_params.charge = Q;
+        sampled_params.sign = group.theta[sampled_index];
+
+        double E_cell = cell.E;
+        double P_cell = cell.P;
+        double sampled_pLRF[4] = {0.0};
+        sample_momentum(sampled_params, sampled_pLRF, gen_mom);
+
+        // signed Cooper-Frye projection p.dSigma / (|dSigma| E), in [-1, 1].
+        // flux>0 is the usual outward contribution; flux<0 is the negative
+        // (inward) contribution the positive path discards.
+        double pdsigma = (lrf.dsigma_t_lrf * sampled_pLRF[0]
+                          - lrf.dsigma_x_lrf * sampled_pLRF[1]
+                          - lrf.dsigma_y_lrf * sampled_pLRF[2]
+                          - lrf.dsigma_z_lrf * sampled_pLRF[3])
+                         / (lrf.dsigma_magnitude * sampled_pLRF[0]);
+        double flux = std::max(0.0, pdsigma);
+
+        double feq = group.spin_degeneracy[sampled_index]/(std::exp((sampled_pLRF[0]
+                            - B * muB
+                            - Q * muQ
+                            - S * muS) / T) + group.theta[sampled_index]);
+        double delta_f = feq*(1.-group.theta[sampled_index]*feq/group.spin_degeneracy[sampled_index])
+                            *df_corrections(settings,deltaf_table ,lrf, tau_squared, sampled_pLRF, T, E_cell,s0_cell, P_cell, mass,sampled_params ,diss_params);
+
+        //normalize delta_f
+        if (settings.get_bool("normalize_deltaf")) {
+            if (delta_f >  feq) delta_f =  feq;
+            if (delta_f < -feq) delta_f = -feq;
+        }
+
+        double weight_visc = 0.5*(1. + delta_f/feq);
+
+        const double u_keep =
+            std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_keep);
+        const double u_y =
+            std::generate_canonical<double, std::numeric_limits<double>::digits>(gen_y);
+
+        bool add_particle = u_keep < (flux * weight_visc);
+        // negative Cooper-Frye branch: the same envelope mirrored to p.dSigma < 0,
+        // accepted with weight |p.dSigma|/(|dSigma| E). Reuses the already-drawn
+        // u_keep/u_y so the positive momentum/acceptance stream is unchanged.
+        bool add_negative = (neg_out != nullptr) && (pdsigma < 0.0)
+                            && (u_keep < (-pdsigma) * weight_visc);
+        if (!add_particle && !add_negative) continue;
+
+        lrf.boost_momentum_to_lab(tau_squared, sampled_pLRF);
+
+        double sinheta = sinh(cell.eta);
+        double cosheta = sqrt(1.0 + sinheta * sinheta);
+
+        double px = lrf.pLab_x;
+        double py = lrf.pLab_y;
+        double pz = 0.0;
+        double E = 0.0;
+        double yp = 0.0;
+        double t,z;
+        if (D == 2) {
+            yp = y_max * (2.0 * u_y - 1.0);
+            double sinhy = sinh(yp);
+            double coshy = sqrt(1.0 + sinhy * sinhy);
+
+            double mT = sqrt(mass * mass + px * px + py * py);
+            double ptau = lrf.pLab_tau;
+            double tau_pn = tau * lrf.pLab_eta;
+
+            sinheta = (ptau * sinhy - tau_pn * coshy) / mT;
+            cosheta = sqrt(1.0 + sinheta * sinheta);
+            pz = mT * sinhy;
+            E  = mT * coshy;
+
+        } else if (D == 3) {
+            if (coord == "cartesian") {
+                pz = lrf.pLab_eta;
+            } else {
+                pz = tau * lrf.pLab_eta * cosheta + lrf.pLab_tau * sinheta;
+            }
+            E = sqrt(mass * mass + px * px + py * py + pz * pz);
+            yp = 0.5 * log((E + pz) / (E - pz));
+        }
+
+        double x = cell.x;
+        double y = cell.y;
+
+        if(coord == "cartesian"){
+            t = tau;
+            z = cell.eta;
+        }
+        else{
+            t = tau * cosheta;
+            z = tau * sinheta;
+        }
+
+        if (pos_smearing > 0.0) {
+            std::uniform_real_distribution<double> smear(-pos_smearing, pos_smearing);
+            // negative particles draw from a dedicated stream so the positive
+            // output stays bit-identical when this feature is enabled.
+            std::mt19937& gen_smear = add_negative ? gen_pos_neg : gen_pos;
+            x += smear(gen_smear);
+            y += smear(gen_smear);
+            z += smear(gen_smear);
+        }
+
+        Particle p(pid, mass, E, px, py, pz, t, x, y, z,
+                   static_cast<int>(B), static_cast<int>(S), static_cast<int>(Q));
+        if (add_particle) {
+            out.push_back(p);
+            ++added;
+        } else {
+            neg_out->push_back(p);   // add_negative == true here
+        }
+    }
 }

@@ -11,9 +11,9 @@ Surface::Surface(const std::string& path , const Settings& settings)
     : path(path), settings(settings), npoints(0) {}
 
 /// @brief Read data from the surface file
-/// @details This function reads the surface data from a file, processes it, 
-/// and stores it in the SurfacePoint objects. It also calculates the 
-/// average thermodynamic quantities and total surface volume.
+/// @details This function reads the surface data from a file, processes it,
+/// and stores it in the per-quantity column vectors (tau, x, ..., diff_*). It also
+/// calculates the average thermodynamic quantities and total surface volume.
 void Surface::read_data()
 {
     int D = settings.get_int("dimension");
@@ -394,5 +394,62 @@ void Surface::read_data()
 
 
     std::cout << "Finished reading surface" << std::endl;
+
+}
+
+
+FluidCell Surface::get_cell(int icell) const {
+    FluidCell cell;
+
+    cell.tau = tau[icell];
+    cell.x   = x[icell];
+    cell.y   = y[icell];
+    cell.eta = eta[icell];
+
+    cell.ut   = ut[icell];
+    cell.ux   = ux[icell];
+    cell.uy   = uy[icell];
+    cell.ueta = ueta[icell];
+
+    cell.dsigma_t   = dsigma_t[icell];
+    cell.dsigma_x   = dsigma_x[icell];
+    cell.dsigma_y   = dsigma_y[icell];
+    cell.dsigma_eta = dsigma_eta[icell];
+
+    cell.T   = T[icell];
+    cell.muB = muB[icell];
+    cell.muS = muS[icell];
+    cell.muQ = muQ[icell];
+    cell.E   = E[icell];
+    cell.P   = P[icell];
+    cell.s   = s[icell];
+
+    cell.shv_tt     = shv_tt[icell];
+    cell.shv_tx     = shv_tx[icell];
+    cell.shv_ty     = shv_ty[icell];
+    cell.shv_teta   = shv_teta[icell];
+    cell.shv_xx     = shv_xx[icell];
+    cell.shv_xy     = shv_xy[icell];
+    cell.shv_xeta   = shv_xeta[icell];
+    cell.shv_yy     = shv_yy[icell];
+    cell.shv_yeta   = shv_yeta[icell];
+    cell.shv_etaeta = shv_etaeta[icell];
+
+    cell.bulk = bulk[icell];
+
+    cell.diff_B0   = diff_B0[icell];
+    cell.diff_Bx   = diff_Bx[icell];
+    cell.diff_By   = diff_By[icell];
+    cell.diff_Beta = diff_Beta[icell];
+    cell.diff_S0   = diff_S0[icell];
+    cell.diff_Sx   = diff_Sx[icell];
+    cell.diff_Sy   = diff_Sy[icell];
+    cell.diff_Seta = diff_Seta[icell];
+    cell.diff_Q0   = diff_Q0[icell];
+    cell.diff_Qx   = diff_Qx[icell];
+    cell.diff_Qy   = diff_Qy[icell];
+    cell.diff_Qeta = diff_Qeta[icell];
+
+    return cell;
 
 }
